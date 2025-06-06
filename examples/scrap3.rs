@@ -29,7 +29,6 @@ static mut SHARED_ADC2: Option<AdcDriver::<ADC2>> = None;
 /// Task 1: Nháy GPIO2 liên tục mỗi 500ms
 unsafe extern "C" fn task1(_: *mut core::ffi::c_void) {
     let peripherals = Peripherals::new();
-    let mut led = PinDriver::output(peripherals.pins.gpio2).unwrap();
     let mut buzzler = PinDriver::output(peripherals.pins.gpio13).unwrap();
     let adc = SHARED_ADC2.as_ref().unwrap();
     let config = AdcChannelConfig {
@@ -39,7 +38,6 @@ unsafe extern "C" fn task1(_: *mut core::ffi::c_void) {
     let mut adc_pin1 = AdcChannelDriver::new(adc, peripherals.pins.gpio25, &config).expect("Error");
     let mut adc_pin2 = AdcChannelDriver::new(adc, peripherals.pins.gpio26, &config).expect("Error");
     loop {
-        led.toggle().unwrap();
         let result1 = adc.read(&mut adc_pin1);
         let result2 = adc.read(&mut adc_pin2);
         println!("[Task 2] ADC value gpio25 gpio26: {}, {}", result1.unwrap(), result2.unwrap());
@@ -76,22 +74,22 @@ fn main() -> anyhow::Result<()> {
         );
     }
     //setup GPIO for keypad
-    let mut row1 = PinDriver::input(&mut peripherals.pins.gpio2)?;
-    let mut row2 = PinDriver::input(&mut peripherals.pins.gpio0)?;
-    let mut row3 = PinDriver::input(&mut peripherals.pins.gpio4)?;
-    let mut row4 = PinDriver::input(&mut peripherals.pins.gpio16)?;
+    let mut row1 = PinDriver::input(&mut peripherals.pins.gpio21)?;
+    let mut row2 = PinDriver::input(&mut peripherals.pins.gpio19)?;
+    let mut row3 = PinDriver::input(&mut peripherals.pins.gpio18)?;
+    let mut row4 = PinDriver::input(&mut peripherals.pins.gpio5)?;
     row1.set_pull(Pull::Down)?;
     row2.set_pull(Pull::Down)?;
     row3.set_pull(Pull::Down)?;
     row4.set_pull(Pull::Down)?;
-    row1.set_interrupt_type(InterruptType::PosEdge)?;
-    row2.set_interrupt_type(InterruptType::PosEdge)?;
-    row3.set_interrupt_type(InterruptType::PosEdge)?;
-    row4.set_interrupt_type(InterruptType::PosEdge)?;
-    let mut col1 = PinDriver::output(peripherals.pins.gpio26).unwrap();
-    let mut col2 = PinDriver::output(peripherals.pins.gpio25).unwrap();
-    let mut col3 = PinDriver::output(peripherals.pins.gpio33).unwrap();
-    let mut col4 = PinDriver::output(peripherals.pins.gpio32).unwrap();
+    row1.set_interrupt_type(InterruptType::AnyEdge)?;
+    row2.set_interrupt_type(InterruptType::AnyEdge)?;
+    row3.set_interrupt_type(InterruptType::AnyEdge)?;
+    row4.set_interrupt_type(InterruptType::AnyEdge)?;
+    let mut col1 = PinDriver::output(&mut peripherals.pins.gpio17)?;
+    let mut col2 = PinDriver::output(&mut peripherals.pins.gpio16)?;
+    let mut col3 = PinDriver::output(&mut peripherals.pins.gpio4)?;
+    let mut col4 = PinDriver::output(&mut peripherals.pins.gpio2)?;
 
     //setup notification for keypad rows
     let notification = Notification::new();
@@ -122,8 +120,8 @@ fn main() -> anyhow::Result<()> {
     // initialize OLED display:
     let peripherals = Peripherals::take()?;
     let i2c = peripherals.i2c0;
-    let sda = peripherals.pins.gpio5;
-    let scl = peripherals.pins.gpio6;
+    let sda = peripherals.pins.gpio23;
+    let scl = peripherals.pins.gpio22;
 
     let config = I2cConfig::new().baudrate(100.kHz().into());
     let i2c_driver = I2cDriver::new(i2c, sda, scl, &config)?;
@@ -134,6 +132,7 @@ fn main() -> anyhow::Result<()> {
     display.init().unwrap();
 
     let style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
+    
     //Main loop:
     loop {
         row1.enable_interrupt()?;
@@ -148,6 +147,7 @@ fn main() -> anyhow::Result<()> {
                     &mut col1, &mut col2, &mut col3, &mut col4,
                 ) {
                     if Some(key) != Some('e') {
+                        println!("[Main] Phím nhấn: {}", key);
                         // Tạo chuỗi để hiển thị ký tự
                         let mut message = String::new();
                         write!(message, "Key: {}", key).unwrap();
