@@ -148,18 +148,6 @@ fn main() -> anyhow::Result<()> {
                 ) {
                     if Some(key) != Some('e') {
                         println!("[Main] Phím nhấn: {}", key);
-                        // Tạo chuỗi để hiển thị ký tự
-                        let mut message = String::new();
-                        write!(message, "Key: {}", key).unwrap();
-
-                        // Xoá màn hình
-                        display.clear(BinaryColor::Off).unwrap();
-
-                        // Vẽ chuỗi lên màn hình
-                        Text::new(&message, Point::new(0, 20), style)
-                            .draw(&mut display)
-                            .unwrap();
-                        display.flush().unwrap();
                     }
                 }
             }
