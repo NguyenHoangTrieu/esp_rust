@@ -7,7 +7,7 @@ resolver = "2"
 rust-version = "1.77"
 
 [[bin]]
-name = "hello1"
+name = "hello_world"
 harness = false # do not use the built in cargo test harness -> resolve rust-analyzer errors
 
 [profile.release]
