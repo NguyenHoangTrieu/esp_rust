@@ -4,7 +4,7 @@ use esp_idf_hal::gpio::*;
 use esp_idf_hal::delay::FreeRtos;
 
 pub fn read_keypad(
-    row1: &mut PinDriver<Gpio21, Input>,
+    row1: &mut PinDriver<Gpio23, Input>,
     row2: &mut PinDriver<Gpio19, Input>,
     row3: &mut PinDriver<Gpio18, Input>,
     row4: &mut PinDriver<Gpio5, Input>,
