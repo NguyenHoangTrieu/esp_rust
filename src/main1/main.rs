@@ -118,20 +118,6 @@ fn main() -> anyhow::Result<()> {
     col4.set_high().unwrap();
 
     // initialize OLED display:
-    let peripherals = Peripherals::take()?;
-    let i2c = peripherals.i2c0;
-    let sda = peripherals.pins.gpio23;
-    let scl = peripherals.pins.gpio22;
-
-    let config = I2cConfig::new().baudrate(100.kHz().into());
-    let i2c_driver = I2cDriver::new(i2c, sda, scl, &config)?;
-
-    let interface = I2CDisplayInterface::new(i2c_driver);
-    let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
-        .into_buffered_graphics_mode();
-    display.init().unwrap();
-
-    let style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
     
     //Main loop:
     loop {
