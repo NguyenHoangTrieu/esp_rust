@@ -118,7 +118,6 @@ fn main() -> anyhow::Result<()> {
     col4.set_high().unwrap();
 
     // initialize OLED display:
-    let peripherals = Peripherals::take()?;
     let i2c = peripherals.i2c0;
     let sda = peripherals.pins.gpio21;
     let scl = peripherals.pins.gpio22;
