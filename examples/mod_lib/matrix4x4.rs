@@ -4,14 +4,14 @@ use esp_idf_hal::gpio::{Input, Output, PinDriver, Gpio0, Gpio2, Gpio4, Gpio16, G
 use esp_idf_hal::delay::FreeRtos;
 
 pub fn read_keypad(
-    row1: &mut PinDriver<Gpio2, Input>,
-    row2: &mut PinDriver<Gpio0, Input>,
-    row3: &mut PinDriver<Gpio4, Input>,
-    row4: &mut PinDriver<Gpio16, Input>,
-    col1: &mut PinDriver<Gpio26, Output>,
-    col2: &mut PinDriver<Gpio25, Output>,
-    col3: &mut PinDriver<Gpio33, Output>,
-    col4: &mut PinDriver<Gpio32, Output>,
+    row1: &mut PinDriver<Gpio21, Input>,
+    row2: &mut PinDriver<Gpio19, Input>,
+    row3: &mut PinDriver<Gpio18, Input>,
+    row4: &mut PinDriver<Gpio5, Input>,
+    col1: &mut PinDriver<Gpio17, Output>,
+    col2: &mut PinDriver<Gpio16, Output>,
+    col3: &mut PinDriver<Gpio4, Output>,
+    col4: &mut PinDriver<Gpio2, Output>,
 ) -> Option<char> {
     let mut data: char = 'e';
     let mut mark_read = false;

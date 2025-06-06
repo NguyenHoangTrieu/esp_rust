@@ -74,10 +74,10 @@ fn main() -> anyhow::Result<()> {
         );
     }
     //setup GPIO for keypad
-    let mut row1 = PinDriver::input(&mut peripherals.pins.gpio2)?;
-    let mut row2 = PinDriver::input(&mut peripherals.pins.gpio0)?;
-    let mut row3 = PinDriver::input(&mut peripherals.pins.gpio4)?;
-    let mut row4 = PinDriver::input(&mut peripherals.pins.gpio16)?;
+    let mut row1 = PinDriver::input(&mut peripherals.pins.gpio21)?;
+    let mut row2 = PinDriver::input(&mut peripherals.pins.gpio19)?;
+    let mut row3 = PinDriver::input(&mut peripherals.pins.gpio18)?;
+    let mut row4 = PinDriver::input(&mut peripherals.pins.gpio5)?;
     row1.set_pull(Pull::Down)?;
     row2.set_pull(Pull::Down)?;
     row3.set_pull(Pull::Down)?;
@@ -86,10 +86,10 @@ fn main() -> anyhow::Result<()> {
     row2.set_interrupt_type(InterruptType::AnyEdge)?;
     row3.set_interrupt_type(InterruptType::AnyEdge)?;
     row4.set_interrupt_type(InterruptType::AnyEdge)?;
-    let mut col1 = PinDriver::output(peripherals.pins.gpio26).unwrap();
-    let mut col2 = PinDriver::output(peripherals.pins.gpio25).unwrap();
-    let mut col3 = PinDriver::output(peripherals.pins.gpio33).unwrap();
-    let mut col4 = PinDriver::output(peripherals.pins.gpio32).unwrap();
+    let mut col1 = PinDriver::output(&mut peripherals.pins.gpio17)?;
+    let mut col2 = PinDriver::output(&mut peripherals.pins.gpio16)?;
+    let mut col3 = PinDriver::output(&mut peripherals.pins.gpio4)?;
+    let mut col4 = PinDriver::output(&mut peripherals.pins.gpio2).?;
 
     //setup notification for keypad rows
     let notification = Notification::new();
