@@ -46,7 +46,7 @@ fn main() {
         .lock()
         .set_data(
             BLEAdvertisementData::new()
-                .name("ESP32 Server 3")
+                .name("ESP32 Server B")
                 .add_service_uuid(uuid128!("9b574847-f706-436c-bed7-fc01eb0965c1")),
         )
         .unwrap();
