@@ -1,17 +1,17 @@
 // src/keypad.rs
 
-use esp_idf_hal::gpio::{Input, Output, PinDriver, Gpio0, Gpio2, Gpio4, Gpio16, Gpio25, Gpio26, Gpio32, Gpio33};
+use esp_idf_hal::gpio::*;
 use esp_idf_hal::delay::FreeRtos;
 
 pub fn read_keypad(
-    row1: &mut PinDriver<Gpio2, Input>,
-    row2: &mut PinDriver<Gpio0, Input>,
-    row3: &mut PinDriver<Gpio4, Input>,
-    row4: &mut PinDriver<Gpio16, Input>,
-    col1: &mut PinDriver<Gpio26, Output>,
-    col2: &mut PinDriver<Gpio25, Output>,
-    col3: &mut PinDriver<Gpio33, Output>,
-    col4: &mut PinDriver<Gpio32, Output>,
+    row1: &mut PinDriver<Gpio21, Input>,
+    row2: &mut PinDriver<Gpio19, Input>,
+    row3: &mut PinDriver<Gpio18, Input>,
+    row4: &mut PinDriver<Gpio5, Input>,
+    col1: &mut PinDriver<Gpio17, Output>,
+    col2: &mut PinDriver<Gpio16, Output>,
+    col3: &mut PinDriver<Gpio4, Output>,
+    col4: &mut PinDriver<Gpio2, Output>,
 ) -> Option<char> {
     let mut data: char = 'e';
     let mut mark_read = false;
@@ -24,7 +24,7 @@ pub fn read_keypad(
     if row1.is_high() { mark_read = true; data = '7'; }
     if row2.is_high() { mark_read = true; data = '4'; }
     if row3.is_high() { mark_read = true; data = '1'; }
-    if row4.is_high() { mark_read = true; data = '*'; }
+    if row4.is_high() { mark_read = true; data = 'O'; }
 
     if !mark_read {
         col1.set_low().unwrap();
@@ -47,7 +47,7 @@ pub fn read_keypad(
         if row1.is_high() { mark_read = true; data = '9'; }
         if row2.is_high() { mark_read = true; data = '6'; }
         if row3.is_high() { mark_read = true; data = '3'; }
-        if row4.is_high() { mark_read = true; data = '#'; }
+        if row4.is_high() { mark_read = true; data = '='; }
     }
 
     if !mark_read {
@@ -56,10 +56,10 @@ pub fn read_keypad(
         col3.set_low().unwrap();
         col4.set_high().unwrap();
 
-        if row1.is_high() { data = 'A'; }
-        if row2.is_high() { data = 'B'; }
-        if row3.is_high() { data = 'C'; }
-        if row4.is_high() { data = 'D'; }
+        if row1.is_high() { data = '/'; }
+        if row2.is_high() { data = '*'; }
+        if row3.is_high() { data = '-'; }
+        if row4.is_high() { data = '+'; }
     }
 
     col1.set_high().unwrap();
@@ -69,5 +69,5 @@ pub fn read_keypad(
 
     FreeRtos::delay_ms(100);
 
-    Some(data)
+    return Some(data);
 }
