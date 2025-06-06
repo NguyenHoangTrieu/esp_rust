@@ -1,5 +1,5 @@
 [package]
-name = "hello1"
+name = "hello_world"
 version = "0.1.0"
 authors = ["trieunguyen0406"]
 edition = "2021"
