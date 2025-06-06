@@ -1,0 +1,49 @@
+[package]
+name = "hello1"
+version = "0.1.0"
+authors = ["trieunguyen0406"]
+edition = "2021"
+resolver = "2"
+rust-version = "1.77"
+
+[[bin]]
+name = "hello1"
+harness = false # do not use the built in cargo test harness -> resolve rust-analyzer errors
+
+[profile.release]
+opt-level = "s"
+
+[profile.dev]
+debug = true    # Symbols are nice and they don't increase the size on Flash
+opt-level = "z"
+
+[features]
+default = []
+
+experimental = ["esp-idf-svc/experimental"]
+
+[dependencies]
+log = { version = "0.4", default-features = false }
+esp-idf-svc = { version = "0.51.0"}
+esp-idf-hal = { version = "0.45.2"}
+esp-idf-sys = { version = "0.36.1" }
+ssd1306 = "0.10.0"
+embedded-graphics = "0.8"
+embedded-hal = "1.0.0"
+anyhow = "1"
+
+bitflags = { version = "2.4.1" }
+bstr = { version = "1.8.0", default-features = false }
+embassy-sync = { version = "0.6" }
+heapless = "0.8.0"
+num_enum = { version = "0.7", default-features = false }
+once_cell = { version = "1.19.0", default-features = false }
+uuid = { version = "1", default-features = false, features = ["macro-diagnostics"] }
+zerocopy = "0.8"
+zerocopy-derive = "0.8"
+esp32-nimble = { version = "0.11.1" }
+cfg-if = "1.0"
+
+[build-dependencies]
+anyhow = "1"
+embuild = "0.33"
