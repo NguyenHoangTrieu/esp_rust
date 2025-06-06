@@ -29,7 +29,6 @@ static mut SHARED_ADC2: Option<AdcDriver::<ADC2>> = None;
 /// Task 1: Nháy GPIO2 liên tục mỗi 500ms
 unsafe extern "C" fn task1(_: *mut core::ffi::c_void) {
     let peripherals = Peripherals::new();
-    let mut led = PinDriver::output(peripherals.pins.gpio2).unwrap();
     let mut buzzler = PinDriver::output(peripherals.pins.gpio13).unwrap();
     let adc = SHARED_ADC2.as_ref().unwrap();
     let config = AdcChannelConfig {
@@ -39,7 +38,6 @@ unsafe extern "C" fn task1(_: *mut core::ffi::c_void) {
     let mut adc_pin1 = AdcChannelDriver::new(adc, peripherals.pins.gpio25, &config).expect("Error");
     let mut adc_pin2 = AdcChannelDriver::new(adc, peripherals.pins.gpio26, &config).expect("Error");
     loop {
-        led.toggle().unwrap();
         let result1 = adc.read(&mut adc_pin1);
         let result2 = adc.read(&mut adc_pin2);
         println!("[Task 2] ADC value gpio25 gpio26: {}, {}", result1.unwrap(), result2.unwrap());
