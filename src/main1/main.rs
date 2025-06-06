@@ -148,6 +148,7 @@ fn main() -> anyhow::Result<()> {
                     &mut col1, &mut col2, &mut col3, &mut col4,
                 ) {
                     if Some(key) != Some('e') {
+                        println!("[Main] Phím nhấn: {}", key);
                         // Tạo chuỗi để hiển thị ký tự
                         let mut message = String::new();
                         write!(message, "Key: {}", key).unwrap();
