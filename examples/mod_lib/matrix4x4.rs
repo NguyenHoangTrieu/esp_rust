@@ -1,6 +1,6 @@
 // src/keypad.rs
 
-use esp_idf_hal::gpio::{Input, Output, PinDriver, Gpio0, Gpio2, Gpio4, Gpio16, Gpio25, Gpio26, Gpio32, Gpio33};
+use esp_idf_hal::gpio::*;
 use esp_idf_hal::delay::FreeRtos;
 
 pub fn read_keypad(
