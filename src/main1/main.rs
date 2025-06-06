@@ -89,7 +89,7 @@ fn main() -> anyhow::Result<()> {
     let mut col1 = PinDriver::output(&mut peripherals.pins.gpio17)?;
     let mut col2 = PinDriver::output(&mut peripherals.pins.gpio16)?;
     let mut col3 = PinDriver::output(&mut peripherals.pins.gpio4)?;
-    let mut col4 = PinDriver::output(&mut peripherals.pins.gpio2).?;
+    let mut col4 = PinDriver::output(&mut peripherals.pins.gpio2)?;
 
     //setup notification for keypad rows
     let notification = Notification::new();
@@ -117,6 +117,22 @@ fn main() -> anyhow::Result<()> {
     col3.set_high().unwrap();
     col4.set_high().unwrap();
 
+    // initialize OLED display:
+    let peripherals = Peripherals::take()?;
+    let i2c = peripherals.i2c0;
+    let sda = peripherals.pins.gpio5;
+    let scl = peripherals.pins.gpio6;
+
+    let config = I2cConfig::new().baudrate(100.kHz().into());
+    let i2c_driver = I2cDriver::new(i2c, sda, scl, &config)?;
+
+    let interface = I2CDisplayInterface::new(i2c_driver);
+    let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
+        .into_buffered_graphics_mode();
+    display.init().unwrap();
+
+    let style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
+    
     //Main loop:
     loop {
         row1.enable_interrupt()?;
