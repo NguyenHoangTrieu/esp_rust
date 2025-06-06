@@ -1,4 +1,6 @@
-git clone https://github.com/NguyenHoangTrieu/esp_rust.git
+cd esp_rust
+git pull
+cd ..
 cp esp_rust/Cargo.toml Cargo.toml
 cp sdkconfig.defaults sdkconfig.defaults
 cp esp_rust/src/main1/main.rs src/main.rs
