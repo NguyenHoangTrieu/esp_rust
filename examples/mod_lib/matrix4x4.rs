@@ -69,5 +69,5 @@ pub fn read_keypad(
 
     FreeRtos::delay_ms(100);
 
-    Some(data)
+    return Some(data);
 }
