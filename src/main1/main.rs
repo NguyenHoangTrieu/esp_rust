@@ -96,8 +96,8 @@ fn main() -> anyhow::Result<()> {
                 .subscribe_notify(false)
                 .await?;
 
-            // Wait for 10 seconds (based on timer ticks)
-            timer.delay(timer.tick_hz() * 10).await?;
+            // Wait for 100 seconds (based on timer ticks)
+            timer.delay(timer.tick_hz() * 100).await?;
 
             // Disconnect the client after done
             client.disconnect()?;
