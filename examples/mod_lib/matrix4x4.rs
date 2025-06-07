@@ -24,7 +24,7 @@ pub fn read_keypad(
     if row1.is_high() { mark_read = true; data = '7'; }
     if row2.is_high() { mark_read = true; data = '4'; }
     if row3.is_high() { mark_read = true; data = '1'; }
-    if row4.is_high() { mark_read = true; data = 'O'; }
+    if row4.is_high() { mark_read = true; data = '*'; }
 
     if !mark_read {
         col1.set_low().unwrap();
@@ -47,7 +47,7 @@ pub fn read_keypad(
         if row1.is_high() { mark_read = true; data = '9'; }
         if row2.is_high() { mark_read = true; data = '6'; }
         if row3.is_high() { mark_read = true; data = '3'; }
-        if row4.is_high() { mark_read = true; data = '='; }
+        if row4.is_high() { mark_read = true; data = '#'; }
     }
 
     if !mark_read {
@@ -56,10 +56,10 @@ pub fn read_keypad(
         col3.set_low().unwrap();
         col4.set_high().unwrap();
 
-        if row1.is_high() { data = '/'; }
-        if row2.is_high() { data = '*'; }
-        if row3.is_high() { data = '-'; }
-        if row4.is_high() { data = '+'; }
+        if row1.is_high() { data = 'A'; }
+        if row2.is_high() { data = 'B'; }
+        if row3.is_high() { data = 'C'; }
+        if row4.is_high() { data = 'D'; }
     }
 
     col1.set_high().unwrap();

@@ -20,6 +20,7 @@ use esp_idf_hal::i2c::*;
 use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
 mod mod_lib {
     pub mod matrix4x4;
+    pub mod image_ret;
 }
 use mod_lib::matrix4x4::read_keypad;
 use core::fmt::Write;
@@ -74,7 +75,7 @@ fn main() -> anyhow::Result<()> {
         );
     }
     //setup GPIO for keypad
-    let mut row1 = PinDriver::input(&mut peripherals.pins.gpio21)?;
+    let mut row1 = PinDriver::input(&mut peripherals.pins.gpio23)?;
     let mut row2 = PinDriver::input(&mut peripherals.pins.gpio19)?;
     let mut row3 = PinDriver::input(&mut peripherals.pins.gpio18)?;
     let mut row4 = PinDriver::input(&mut peripherals.pins.gpio5)?;
@@ -118,9 +119,8 @@ fn main() -> anyhow::Result<()> {
     col4.set_high().unwrap();
 
     // initialize OLED display:
-    let peripherals = Peripherals::take()?;
     let i2c = peripherals.i2c0;
-    let sda = peripherals.pins.gpio23;
+    let sda = peripherals.pins.gpio21;
     let scl = peripherals.pins.gpio22;
 
     let config = I2cConfig::new().baudrate(100.kHz().into());
