@@ -1,160 +1,109 @@
-use esp_idf_hal::delay::FreeRtos;
-use esp_idf_hal::gpio::*;
-use esp_idf_hal::peripherals::Peripherals;
-use esp_idf_sys::*;
-use std::ffi::CString;
-use std::ptr;
-use esp_idf_hal::adc::attenuation::DB_11;
-use esp_idf_hal::adc::oneshot::config::AdcChannelConfig;
-use esp_idf_hal::adc::{oneshot::*, ADC2};
-use esp_idf_hal::task::notification::Notification;
-use core::num::NonZeroU32;
-use esp_idf_hal::prelude::*;
-use embedded_graphics::{
-    prelude::*,
-    pixelcolor::*,
-    image::ImageRaw,
+use bstr::ByteSlice; // For byte string operations
+use esp32_nimble::{uuid128, BLEDevice, BLEScan}; // BLE support using NimBLE
+use esp_idf_svc::hal::{ // ESP-IDF Hardware Abstraction Layer
+    prelude::Peripherals, // Access to board peripherals
+    task::block_on,        // Used to block on async execution
+    timer::{TimerConfig, TimerDriver}, // Timer functionality
 };
-use esp_idf_hal::i2c::*;
-use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
-mod mod_lib {
-    pub mod matrix4x4;
-    pub mod image_ret;
-}
-use mod_lib::matrix4x4::read_keypad;
-use mod_lib::image_ret::*;
-
-static mut SHARED_ADC2: Option<AdcDriver::<ADC2>> = None;
-
-/// Task 1: Nháy GPIO2 liên tục mỗi 500ms
-unsafe extern "C" fn task1(_: *mut core::ffi::c_void) {
-    let peripherals = Peripherals::new();
-    let mut buzzler = PinDriver::output(peripherals.pins.gpio13).unwrap();
-    let adc = SHARED_ADC2.as_ref().unwrap();
-    let config = AdcChannelConfig {
-        attenuation: DB_11,
-        ..Default::default()
-    };
-    let mut adc_pin1 = AdcChannelDriver::new(adc, peripherals.pins.gpio25, &config).expect("Error");
-    let mut adc_pin2 = AdcChannelDriver::new(adc, peripherals.pins.gpio26, &config).expect("Error");
-    loop {
-        let result1 = adc.read(&mut adc_pin1);
-        let result2 = adc.read(&mut adc_pin2);
-        println!("[Task 2] ADC value gpio25 gpio26: {}, {}", result1.unwrap(), result2.unwrap());
-        if result1.unwrap() > 1000 || result2.unwrap() > 800 {
-            buzzler.set_low().unwrap();
-            println!("[Task 2] IR sensor triggered or ADC value high, buzzler ON");
-        } else {
-            buzzler.set_high().unwrap();
-            
-        }
-        FreeRtos::delay_ms(500);
-    }
-}
 
 fn main() -> anyhow::Result<()> {
-    esp_idf_sys::link_patches();
-    let mut handle1: esp_idf_sys::TaskHandle_t = ptr::null_mut();
-    let mut peripherals = Peripherals::take()?;
-    let adc2 = AdcDriver::new(peripherals.adc2).unwrap();
-    unsafe {
-        SHARED_ADC2 = Some(adc2);
-    }
-    // Tạo Task:
-    unsafe {
-        // Tạo Task 1
-        xTaskCreatePinnedToCore(
-            Some(task1),
-            CString::new("Task1")?.into_raw(),
-            4096,
-            ptr::null_mut(),
-            4,
-            &mut handle1,
-            1,
-        );
-    }
-    //setup GPIO for keypad
-    let mut row1 = PinDriver::input(&mut peripherals.pins.gpio23)?;
-    let mut row2 = PinDriver::input(&mut peripherals.pins.gpio19)?;
-    let mut row3 = PinDriver::input(&mut peripherals.pins.gpio18)?;
-    let mut row4 = PinDriver::input(&mut peripherals.pins.gpio5)?;
-    row1.set_pull(Pull::Down)?;
-    row2.set_pull(Pull::Down)?;
-    row3.set_pull(Pull::Down)?;
-    row4.set_pull(Pull::Down)?;
-    row1.set_interrupt_type(InterruptType::AnyEdge)?;
-    row2.set_interrupt_type(InterruptType::AnyEdge)?;
-    row3.set_interrupt_type(InterruptType::AnyEdge)?;
-    row4.set_interrupt_type(InterruptType::AnyEdge)?;
-    let mut col1 = PinDriver::output(&mut peripherals.pins.gpio17)?;
-    let mut col2 = PinDriver::output(&mut peripherals.pins.gpio16)?;
-    let mut col3 = PinDriver::output(&mut peripherals.pins.gpio4)?;
-    let mut col4 = PinDriver::output(&mut peripherals.pins.gpio2)?;
+    // Required for ESP-IDF systems to patch system calls
+    esp_idf_svc::sys::link_patches();
 
-    //setup notification for keypad rows
-    let notification = Notification::new();
-    let notifier1 = notification.notifier();
-    let notifier2 = notification.notifier();
-    let notifier3 = notification.notifier();
-    let notifier4 = notification.notifier();
-    unsafe {
-        row1.subscribe(move || {
-            notifier1.notify(NonZeroU32::new(1).unwrap());
-        })?;
-        row2.subscribe(move || {
-            notifier2.notify(NonZeroU32::new(1).unwrap());
-        })?;
-        row3.subscribe(move || {
-            notifier3.notify(NonZeroU32::new(1).unwrap());
-        })?;
-        row4.subscribe(move || {
-            notifier4.notify(NonZeroU32::new(1).unwrap());
-        })?;
-    }
+    // Initialize the logger to output logs to serial
+    esp_idf_svc::log::EspLogger::initialize_default();
 
-    col1.set_high().unwrap();
-    col2.set_high().unwrap();
-    col3.set_high().unwrap();
-    col4.set_high().unwrap();
+    // Get access to board peripherals (timers, pins, etc.)
+    let peripherals = Peripherals::take()?;
 
-    // initialize OLED display:
-    let i2c = peripherals.i2c0;
-    let sda = peripherals.pins.gpio21;
-    let scl = peripherals.pins.gpio22;
+    // Initialize a timer using TIMER0 with default configuration
+    let mut timer = TimerDriver::new(peripherals.timer00, &TimerConfig::new())?;
 
-    let config = I2cConfig::new().baudrate(100.kHz().into());
-    let i2c_driver = I2cDriver::new(i2c, sda, scl, &config)?;
+    // Run async code using block_on
+    block_on(async {
+        // Get the global BLEDevice singleton instance
+        let ble_device = BLEDevice::take();
 
-    let interface = I2CDisplayInterface::new(i2c_driver);
-    let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
-        .into_buffered_graphics_mode();
-    display.init().unwrap();
-    
-    //Main loop:
-    loop {
-        row1.enable_interrupt()?;
-        row2.enable_interrupt()?;
-        row3.enable_interrupt()?;
-        row4.enable_interrupt()?;
-        let bitset = notification.wait(esp_idf_hal::delay::BLOCK);
-        match bitset {
-            Some(nz) if nz.get() == 1 => {
-                if let Some(key) = read_keypad(
-                    &mut row1, &mut row2, &mut row3, &mut row4,
-                    &mut col1, &mut col2, &mut col3, &mut col4,
-                ) {
-                    if Some(key) != Some('e') {
-                        println!("[Main] Phím nhấn: {}", key);
-                        let data: &[u8; 1024] = image_return(key).expect("Failed to get image data");
-                        let image = ImageRaw::<BinaryColor>::new(data, 128);
-                        embedded_graphics::image::Image::new(&image, Point::zero())
-                        .draw(&mut display).unwrap();
-                        display.flush().unwrap();
+        // Create a new BLE scanner
+        let mut ble_scan = BLEScan::new();
+
+        // Start scanning for BLE devices name contains "ESP32"
+        // - active_scan: request scan response
+        // - interval and window define scan parameters
+        // - 10000 is timeout (ms)
+        // - closure returns Some(device) if name contains "ESP32"
+        let device = ble_scan
+            .active_scan(true)
+            .interval(100)
+            .window(99)
+            .start(ble_device, 10000, |device, data| {
+                if let Some(name) = data.name() {
+                    if name.contains_str("ESP32") {
+                        return Some(*device);
                     }
                 }
+                None
+            })
+            .await?;
+
+        // If a matching device was found
+        if let Some(device) = device {
+            // Create a BLE client to connect to the server
+            let mut client = ble_device.new_client();
+
+            // Register connection callback to update BLE connection parameters
+            client.on_connect(|client| {
+                client.update_conn_params(120, 120, 0, 60).unwrap();
+            });
+
+            // Connect to the BLE device using its address
+            client.connect(&device.addr()).await?;
+
+            // Discover the desired service using its UUID
+            let service = client
+                .get_service(uuid128!("fafafafa-fafa-fafa-fafa-fafafafafafa"))
+                .await?;
+
+            // Discover a characteristic to read from using its UUID
+            let uuid = uuid128!("d4e0e0d0-1a2b-11e9-ab14-d663bd873d93");
+            let characteristic = service.get_characteristic(uuid).await?;
+
+            // Read the value from the characteristic and print it
+            let value = characteristic.read_value().await?;
+            ::log::info!(
+                "{} value: {}",
+                characteristic,
+                core::str::from_utf8(&value)? // Convert from UTF-8 bytes to string
+            );
+
+            // Discover another characteristic that supports notifications
+            let uuid = uuid128!("a3c87500-8ed3-4bdf-8a39-a01bebede295");
+            let characteristic = service.get_characteristic(uuid).await?;
+
+            // Check if characteristic supports notification
+            if !characteristic.can_notify() {
+                ::log::error!("characteristic can't notify: {}", characteristic);
+                return anyhow::Ok(()); // Exit gracefully
             }
-            Some(_) => {}
-            None => {}
+
+            // Subscribe to notifications from the characteristic
+            ::log::info!("subscribe to {}", characteristic);
+            characteristic
+                .on_notify(|data| {
+                    // Print out each received notification (UTF-8 string)
+                    ::log::info!("{}", core::str::from_utf8(data).unwrap());
+                })
+                .subscribe_notify(false)
+                .await?;
+
+            // Wait for 10 seconds (based on timer ticks)
+            timer.delay(timer.tick_hz() * 10).await?;
+
+            // Disconnect the client after done
+            client.disconnect()?;
         }
-    }
+
+        // Return success
+        anyhow::Ok(())
+    })
 }
