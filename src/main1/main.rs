@@ -36,8 +36,10 @@ fn main() -> anyhow::Result<()> {
       .interval(100)
       .window(99)
       .start(ble_device, 10000, |device, data| {
-        if data.is_advertising_service(&SERVICE_UUID) {
-          return Some(*device); // Found matching device
+        if let Some(name) = data.device_name() {
+            if name.contains("IPhone") {
+                return Some(*device);
+            }
         }
         None
       })
