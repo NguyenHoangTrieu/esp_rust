@@ -36,7 +36,7 @@ fn main() -> anyhow::Result<()> {
       .interval(100)
       .window(99)
       .start(ble_device, 10000, |device, data| {
-        if let Some(name) = data.device_name() {
+        if let Some(name) = data.name() {
             if name.contains("IPhone") {
                 return Some(*device);
             }
