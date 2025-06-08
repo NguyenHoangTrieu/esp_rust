@@ -116,8 +116,6 @@ fn main() -> anyhow::Result<()> {
       ::log::error!("characteristic can't notify: {}", notification_characteristic);
       return anyhow::Ok(()); // Exit gracefully
     }
-    // Read its value
-    let value = notification_characteristic.read_value().await?;
     // Log the read value
     ::log::info!("subscribe to {}", notification_characteristic);
     notification_characteristic
