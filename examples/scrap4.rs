@@ -10,6 +10,7 @@ use esp_idf_hal::adc::{oneshot::*, ADC2};
 use esp_idf_hal::task::notification::Notification;
 use core::num::NonZeroU32;
 use esp_idf_hal::prelude::*;
+use esp32_nimble::{uuid128, BLEAdvertisementData, BLEDevice, NimbleProperties};
 use embedded_graphics::{
     prelude::*,
     pixelcolor::*,
@@ -25,6 +26,7 @@ use mod_lib::matrix4x4::read_keypad;
 use mod_lib::image_ret::*;
 
 static mut SHARED_ADC2: Option<AdcDriver::<ADC2>> = None;
+static mut KEY1: char = ' ';
 
 /// Task 1: Nháy GPIO2 liên tục mỗi 500ms
 unsafe extern "C" fn task1(_: *mut core::ffi::c_void) {
@@ -52,6 +54,43 @@ unsafe extern "C" fn task1(_: *mut core::ffi::c_void) {
     }
 }
 
+unsafe extern "C" fn task2(_: *mut core::ffi::c_void){
+    let ble_device = BLEDevice::take();
+    let ble_advertiser = ble_device.get_advertising();
+    let server = ble_device.get_server();
+    server.on_connect(|server, clntdesc| {
+        println!("{:?}", clntdesc);
+        server
+            .update_conn_params(clntdesc.conn_handle(), 24, 48, 0, 60)
+            .unwrap();
+    });
+    server.on_disconnect(|_desc, _reason| {
+        println!("Disconnected, back to advertising");
+    });
+    let my_service = server.create_service(uuid128!("9b574847-f706-436c-bed7-fc01eb0965c1"));
+    let my_service_characteristic = my_service.lock().create_characteristic(
+        uuid128!("681285a6-247f-48c6-80ad-68c3dce18585"),
+        NimbleProperties::READ | NimbleProperties::NOTIFY,
+    );
+    my_service_characteristic.lock().set_value(b"Start Value");
+    ble_advertiser
+        .lock()
+        .set_data(
+            BLEAdvertisementData::new()
+                .name("ESP32 Server")
+                .add_service_uuid(uuid128!("9b574847-f706-436c-bed7-fc01eb0965c1")),
+        )
+        .unwrap();
+    ble_advertiser.lock().start().unwrap();
+    loop{
+         my_service_characteristic
+            .lock()
+            .set_value(format!("Previous key pressed: {KEY1}").as_bytes())
+            .notify();
+        FreeRtos::delay_ms(1000);
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     esp_idf_sys::link_patches();
     let mut handle1: esp_idf_sys::TaskHandle_t = ptr::null_mut();
@@ -70,6 +109,16 @@ fn main() -> anyhow::Result<()> {
             ptr::null_mut(),
             4,
             &mut handle1,
+            1,
+        );
+        // Tạo Task 2 (blink GPIO2)
+        xTaskCreatePinnedToCore(
+            Some(task2),
+            CString::new("Task2")?.into_raw(),
+            4096,
+            ptr::null_mut(),
+            5,
+            ptr::null_mut(),
             1,
         );
     }
@@ -130,6 +179,7 @@ fn main() -> anyhow::Result<()> {
         .into_buffered_graphics_mode();
     display.init().unwrap();
     
+    
     //Main loop:
     loop {
         row1.enable_interrupt()?;
@@ -144,6 +194,9 @@ fn main() -> anyhow::Result<()> {
                     &mut col1, &mut col2, &mut col3, &mut col4,
                 ) {
                     if Some(key) != Some('e') {
+                        unsafe{
+                            KEY1 = key;
+                        }
                         println!("[Main] Phím nhấn: {}", key);
                         let data: &[u8; 1024] = image_return(key).expect("Failed to get image data");
                         let image = ImageRaw::<BinaryColor>::new(data, 128);
