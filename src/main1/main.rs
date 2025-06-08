@@ -38,7 +38,7 @@ fn main() -> anyhow::Result<()> {
       .start(ble_device, 10000, |device, data| {
         if let Some(name_bytes) = data.name() {
             if let Ok(name) = core::str::from_utf8(name_bytes) {
-                if name.contains("iPhone") {
+                if name.contains("Iphone") {
                     return Some(*device);
                 }
             }
