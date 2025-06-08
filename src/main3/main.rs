@@ -77,7 +77,7 @@ unsafe extern "C" fn task2(_: *mut core::ffi::c_void){
         .lock()
         .set_data(
             BLEAdvertisementData::new()
-                .name("ESP32 Server")
+                .name("Test Server")
                 .add_service_uuid(uuid128!("9b574847-f706-436c-bed7-fc01eb0965c1")),
         )
         .unwrap();
