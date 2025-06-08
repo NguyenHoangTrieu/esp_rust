@@ -3,7 +3,7 @@ use esp_idf_svc::hal::task::block_on;
 use log::*;
 
 // Define the service UUID the central is looking for
-const SERVICE_UUID: BleUuid = BleUuid::Uuid16(0xABCD);
+const SERVICE_UUID: BleUuid = BleUuid::Uuid16(0xFD0D);
 
 fn main() -> anyhow::Result<()> {
   esp_idf_svc::sys::link_patches();
