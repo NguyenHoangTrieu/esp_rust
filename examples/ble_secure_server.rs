@@ -62,12 +62,6 @@ fn main() -> anyhow::Result<()> {
     .lock()
     .set_value("secure_characteristic".as_bytes());
 
-  // On ESP32-C3, advertising stops after bonding — workaround to restart advertising
-  #[cfg(esp32c3)]
-  ble_advertising.lock().on_complete(|_| {
-    ble_advertising.lock().start().unwrap();
-  });
-
   // Set up BLE advertising with a name and advertised service UUID
   ble_advertising.lock().set_data(
     BLEAdvertisementData::new()

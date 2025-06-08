@@ -1,16 +1,24 @@
 use esp32_nimble::{enums::*, utilities::BleUuid, BLEDevice, BLEScan};
-use esp_idf_svc::hal::task::block_on;
 use log::*;
-
+use esp_idf_svc::hal::{ // ESP-IDF Hardware Abstraction Layer
+    prelude::Peripherals, // Access to board peripherals
+    task::block_on,        // Used to block on async execution
+    timer::{TimerConfig, TimerDriver}, // Timer functionality
+};
 // Define the service UUID the central is looking for
 const SERVICE_UUID: BleUuid = BleUuid::Uuid16(0xABCD);
 
 fn main() -> anyhow::Result<()> {
-  esp_idf_svc::sys::link_patches();
-  esp_idf_svc::log::EspLogger::initialize_default();
+    esp_idf_svc::sys::link_patches();
+    esp_idf_svc::log::EspLogger::initialize_default();
 
-  // Run the BLE workflow asynchronously
-  block_on(async {
+    let peripherals = Peripherals::take()?;
+
+    // Initialize a timer using TIMER0 with default configuration
+    let mut timer = TimerDriver::new(peripherals.timer00, &TimerConfig::new())?;
+
+    // Run the BLE workflow asynchronously
+    block_on(async {
     // Take ownership of the BLE device (singleton)
     let ble_device = BLEDevice::take();
 
@@ -101,6 +109,25 @@ fn main() -> anyhow::Result<()> {
       secure_characteristic.uuid(),
       core::str::from_utf8(&value)?
     );
+
+    let notification_characteristic = service.get_characteristic(BleUuid::Uuid16(0x1236)).await?;
+    // Check if the characteristic supports notifications
+    if !notification_characteristic.can_notify() {
+      ::log::error!("characteristic can't notify: {}", notification_characteristic);
+      return anyhow::Ok(()); // Exit gracefully
+    }
+    // Read its value
+    let value = notification_characteristic.read_value().await?;
+    // Log the read value
+    ::log::info!("subscribe to {}", notification_characteristic);
+    notification_characteristic
+        .on_notify(|data| {
+            // Print out each received notification (UTF-8 string)
+            ::log::info!("{}", core::str::from_utf8(data).unwrap());
+        })
+        .subscribe_notify(false)
+        .await?;
+    timer.delay(timer.tick_hz() * 100).await?;
 
     // Disconnect from the device gracefully
     client.disconnect()?;
