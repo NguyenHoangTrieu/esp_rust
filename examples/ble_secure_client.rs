@@ -39,6 +39,13 @@ fn main() -> anyhow::Result<()> {
         if data.is_advertising_service(&SERVICE_UUID) {
           return Some(*device); // Found matching device
         }
+        // if let Some(name_bytes) = data.name() {
+        //     if let Ok(name) = core::str::from_utf8(name_bytes) {
+        //         if name.contains("Iphone") {
+        //             return Some(*device);
+        //         }
+        //     }
+        // }
         None
       })
       .await?;
