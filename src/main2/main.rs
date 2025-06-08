@@ -1,111 +1,88 @@
-// Import BLE helper types and macros from the esp32_nimble crate
-use esp32_nimble::{uuid128, BLEAdvertisementData, BLEDevice, NimbleProperties}; 
-use std::format;
+use esp32_nimble::{
+  enums::*, utilities::BleUuid, BLEAdvertisementData, BLEDevice, NimbleProperties,
+};
 
 fn main() -> anyhow::Result<()> {
-    // Link necessary patches for ESP-IDF BLE runtime
-    esp_idf_svc::sys::link_patches();
+  esp_idf_svc::sys::link_patches();
+  esp_idf_svc::log::EspLogger::initialize_default();
 
-    // Take ownership of the BLE device (singleton)
-    let ble_device = BLEDevice::take();
-    // Get a handle to the advertising subsystem
-    let ble_advertising = ble_device.get_advertising();
+   // Acquire a singleton instance of the BLE device
+  let device = BLEDevice::take();
+  let ble_advertising = device.get_advertising();
 
-    // Get a handle to the GATT server
-    let server = ble_device.get_server();
+  // Configure BLE security settings
+  device
+    .security()
+    .set_auth(AuthReq::all())             // Require all security features: MITM, bonding, encryption
+    .set_passkey(123456)                  // Set fixed passkey for pairing
+    .set_io_cap(SecurityIOCap::DisplayOnly) // Set device to have only a display (no input)
+    .resolve_rpa();                       // Enable resolving of Resolvable Private Addresses (RPA)
 
-    // Define behavior when a client connects
-    server.on_connect(|server, desc| {
-        println!("Client connected: {:?}", desc);
+  // Create a GATT server
+  let server = device.get_server();
 
-        // Update connection parameters: min/max interval, latency, supervision timeout
-        server
-            .update_conn_params(desc.conn_handle(), 24, 48, 0, 60)
-            .unwrap();
+  // Callback: When a client connects
+  server.on_connect(|server, desc| {
+    ::log::info!("Client connected: {:?}", desc);
 
-        // Restart advertising if multiple connections are supported and available
-        if server.connected_count() < (esp_idf_svc::sys::CONFIG_BT_NIMBLE_MAX_CONNECTIONS as _) {
-            println!("Multi-connect support: start advertising");
-            ble_advertising.lock().start().unwrap();
-        }
-    });
-
-    // Define behavior when a client disconnects
-    server.on_disconnect(|_desc, reason| {
-        println!("Client disconnected ({:?})", reason);
-    });
-
-    // Create a new BLE service with a 128-bit UUID
-    let service = server.create_service(uuid128!("fafafafa-fafa-fafa-fafa-fafafafafafa"));
-
-    // ---------- STATIC CHARACTERISTIC ----------
-    // Create a read-only characteristic under the service
-    let static_characteristic = service.lock().create_characteristic(
-        uuid128!("d4e0e0d0-1a2b-11e9-ab14-d663bd873d93"),
-        NimbleProperties::READ,
-    );
-    // Set a static string value to be returned on read
-    static_characteristic
-        .lock()
-        .set_value("Hello, world!".as_bytes());
-
-    // ---------- NOTIFYING CHARACTERISTIC ----------
-    // Create a characteristic that can be read and notifies changes
-    let notifying_characteristic = service.lock().create_characteristic(
-        uuid128!("a3c87500-8ed3-4bdf-8a39-a01bebede295"),
-        NimbleProperties::READ | NimbleProperties::NOTIFY,
-    );
-    // Set initial value
-    notifying_characteristic.lock().set_value(b"Initial value.");
-
-    // ---------- WRITABLE CHARACTERISTIC ----------
-    // Create a characteristic that supports both reading and writing
-    let writable_characteristic = service.lock().create_characteristic(
-        uuid128!("3c9a3f00-8ed3-4bdf-8a39-a01bebede295"),
-        NimbleProperties::READ | NimbleProperties::WRITE,
-    );
-    writable_characteristic
-        .lock()
-        .on_read(move |_, _| {
-            // Log when characteristic is read
-            println!("Read from writable characteristic.");
-        })
-        .on_write(|args| {
-            // Log when new data is written to the characteristic
-            println!(
-                "Wrote to writable characteristic: {:?} -> {:?}",
-                args.current_data(),
-                args.recv_data()
-            );
-        });
-
-    // Configure advertising data: set device name and advertised service UUID
-    ble_advertising.lock().set_data(
-        BLEAdvertisementData::new()
-            .name("ESP32-GATT-Server")
-            .add_service_uuid(uuid128!("fafafafa-fafa-fafa-fafa-fafafafafafa")),
-    )?;
-
-    // Start advertising
-    ble_advertising.lock().start()?;
-
-    // Print local attribute table to serial console
-    server.ble_gatts_show_local();
-
-    // ---------- MAIN LOOP ----------
-    // Send a notification every second with an incrementing counter
-    let mut counter = 0;
-    loop {
-        // Wait 1 second
-        esp_idf_svc::hal::delay::FreeRtos::delay_ms(1000);
-
-        // Update value of notifying characteristic and send notification
-        notifying_characteristic
-            .lock()
-            .set_value(format!("Counter: {counter}").as_bytes())
-            .notify();
-
-        // Increment counter
-        counter += 1;
+    // If max connections not reached, continue advertising
+    if server.connected_count() < (esp_idf_svc::sys::CONFIG_BT_NIMBLE_MAX_CONNECTIONS as _) {
+      ::log::info!("Multi-connect support: start advertising");
+      ble_advertising.lock().start().unwrap();
     }
+  });
+
+  // Callback: When a client disconnects
+  server.on_disconnect(|_desc, reason| {
+    ::log::info!("Client disconnected ({:?})", reason);
+  });
+
+  // Callback: Authentication result logging
+  server.on_authentication_complete(|_, desc, result| {
+    ::log::info!("AuthenticationComplete({:?}): {:?}", result, desc);
+  });
+
+  // Create a GATT service with UUID 0xABCD
+  let service = server.create_service(BleUuid::Uuid16(0xABCD));
+
+  // Add a non-secure characteristic (anyone can read it)
+  let non_secure_characteristic = service
+    .lock()
+    .create_characteristic(BleUuid::Uuid16(0x1234), NimbleProperties::READ);
+  non_secure_characteristic
+    .lock()
+    .set_value("non_secure_characteristic".as_bytes());
+
+  // Add a secure characteristic (requires encryption and authentication)
+  let secure_characteristic = service.lock().create_characteristic(
+    BleUuid::Uuid16(0x1235),
+    NimbleProperties::READ | NimbleProperties::READ_ENC | NimbleProperties::READ_AUTHEN,
+  );
+  secure_characteristic
+    .lock()
+    .set_value("secure_characteristic".as_bytes());
+
+  // On ESP32-C3, advertising stops after bonding — workaround to restart advertising
+  #[cfg(esp32c3)]
+  ble_advertising.lock().on_complete(|_| {
+    ble_advertising.lock().start().unwrap();
+  });
+
+  // Set up BLE advertising with a name and advertised service UUID
+  ble_advertising.lock().set_data(
+    BLEAdvertisementData::new()
+      .name("ESP32-GATT-Server") // Name shown during scanning
+      .add_service_uuid(BleUuid::Uuid16(0xABCD)), // Advertise the service
+  )?;
+
+  // Start BLE advertising
+  ble_advertising.lock().start()?;
+
+  // Log the list of bonded client addresses
+  ::log::info!("bonded_addresses: {:?}", device.bonded_addresses());
+
+  // Keep the program running (simulate a running BLE server)
+  loop {
+    esp_idf_svc::hal::delay::FreeRtos::delay_ms(1000);
+  }
 }
