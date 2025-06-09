@@ -61,6 +61,8 @@ fn main() -> anyhow::Result<()> {
   secure_characteristic
     .lock()
     .set_value("secure_characteristic".as_bytes());
+  
+  // Add a notification characteristic (can be read and notified)
   let notification_characteristic = service.lock().create_characteristic(
     BleUuid::Uuid16(0x1236),
     NimbleProperties::READ | NimbleProperties::NOTIFY| NimbleProperties::READ_ENC | NimbleProperties::READ_AUTHEN,

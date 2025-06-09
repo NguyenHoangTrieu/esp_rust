@@ -61,6 +61,15 @@ fn main() -> anyhow::Result<()> {
   secure_characteristic
     .lock()
     .set_value("secure_characteristic".as_bytes());
+  
+  // Add a notification characteristic (can be read and notified)
+  let notification_characteristic = service.lock().create_characteristic(
+    BleUuid::Uuid16(0x1236),
+    NimbleProperties::READ | NimbleProperties::NOTIFY| NimbleProperties::READ_ENC | NimbleProperties::READ_AUTHEN,
+  );
+  notification_characteristic
+    .lock()
+    .set_value(b"initial value");
 
   // Set up BLE advertising with a name and advertised service UUID
   ble_advertising.lock().set_data(
@@ -74,9 +83,15 @@ fn main() -> anyhow::Result<()> {
 
   // Log the list of bonded client addresses
   ::log::info!("bonded_addresses: {:?}", device.bonded_addresses());
-
+  let mut value = 0;
   // Keep the program running (simulate a running BLE server)
   loop {
+  // Update the notification characteristic value
+    notification_characteristic
+      .lock()
+      .set_value(format!("Counter: {}", value).as_bytes())
+      .notify();
+    value += 1;
     esp_idf_svc::hal::delay::FreeRtos::delay_ms(1000);
   }
 }
