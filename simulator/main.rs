@@ -4,8 +4,8 @@ use esp_idf_hal::uart::*;
 use esp_idf_hal::delay::*;
 use embedded_hal::serial::{Read, Write};
 
-mod e32_module;
-mod buffer;
+mod simulator::e32_module;
+mod simulator::buffer;
 
 use simulator::e32_module::*;
 use simulator::buffer::*;
