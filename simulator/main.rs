@@ -7,8 +7,8 @@ use embedded_hal::serial::{Read, Write};
 mod e32_module;
 mod buffer;
 
-use e32_module::*;
-use buffer::*;
+use simulator::e32_module::*;
+use simulator::buffer::*;
 
 const BUFF_SIZE: usize = 256;
 const MAX_WAIT_TIMES: u8 = 3;
