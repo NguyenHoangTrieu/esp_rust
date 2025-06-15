@@ -1,213 +1,194 @@
-use esp_idf_hal::delay::FreeRtos;
 use esp_idf_hal::gpio::*;
-use esp_idf_hal::peripherals::Peripherals;
-use esp_idf_sys::*;
-use std::ffi::CString;
-use std::ptr;
-use esp_idf_hal::adc::attenuation::DB_11;
-use esp_idf_hal::adc::oneshot::config::AdcChannelConfig;
-use esp_idf_hal::adc::{oneshot::*, ADC2};
-use esp_idf_hal::task::notification::Notification;
-use core::num::NonZeroU32;
 use esp_idf_hal::prelude::*;
-use esp32_nimble::{uuid128, BLEAdvertisementData, BLEDevice, NimbleProperties};
-use embedded_graphics::{
-    prelude::*,
-    pixelcolor::*,
-    image::ImageRaw,
-};
-use esp_idf_hal::i2c::*;
-use ssd1306::{prelude::*, I2CDisplayInterface, Ssd1306};
-mod mod_lib {
-    pub mod matrix4x4;
-    pub mod image_ret;
+use esp_idf_hal::delay::*;
+use esp_idf_hal::*;
+use core::sync::atomic::{AtomicBool, Ordering};
+mod simulator{
+    pub mod e32_module;
+    pub mod buffer;
 }
-use mod_lib::matrix4x4::read_keypad;
-use mod_lib::image_ret::*;
+use simulator::e32_module::*;
+use simulator::buffer::*;
 
-static mut SHARED_ADC2: Option<AdcDriver::<ADC2>> = None;
-static mut KEY1: char = ' ';
+const BUFF_SIZE: usize = 256;
+const MAX_WAIT_TIMES: u8 = 3;
+const BYTE_TIME_57600: u64 = 70*2;  // us
+const BYTE_TIME_19200: u64 = 416;   // us
+static TIMER0_EXPIRED: AtomicBool = AtomicBool::new(false);
+static TIMER1_EXPIRED: AtomicBool = AtomicBool::new(false);
 
-/// Task 1: Nháy GPIO2 liên tục mỗi 500ms
-unsafe extern "C" fn task1(_: *mut core::ffi::c_void) {
-    let peripherals = Peripherals::new();
-    let mut buzzler = PinDriver::output(peripherals.pins.gpio13).unwrap();
-    let adc = SHARED_ADC2.as_ref().unwrap();
-    let config = AdcChannelConfig {
-        attenuation: DB_11,
-        ..Default::default()
-    };
-    let mut adc_pin1 = AdcChannelDriver::new(adc, peripherals.pins.gpio25, &config).expect("Error");
-    let mut adc_pin2 = AdcChannelDriver::new(adc, peripherals.pins.gpio26, &config).expect("Error");
-    loop {
-        let result1 = adc.read(&mut adc_pin1);
-        let result2 = adc.read(&mut adc_pin2);
-        println!("[Task 2] ADC value gpio25 gpio26: {}, {}", result1.unwrap(), result2.unwrap());
-        if result1.unwrap() > 1000 || result2.unwrap() > 800 {
-            buzzler.set_low().unwrap();
-            println!("[Task 2] IR sensor triggered or ADC value high, buzzler ON");
-        } else {
-            buzzler.set_high().unwrap();
-            
-        }
-        FreeRtos::delay_ms(500);
-    }
-}
-
-unsafe extern "C" fn task2(_: *mut core::ffi::c_void){
-    let ble_device = BLEDevice::take();
-    let ble_advertiser = ble_device.get_advertising();
-    let server = ble_device.get_server();
-    server.on_connect(|server, clntdesc| {
-        println!("{:?}", clntdesc);
-        server
-            .update_conn_params(clntdesc.conn_handle(), 24, 48, 0, 60)
-            .unwrap();
-    });
-    server.on_disconnect(|_desc, _reason| {
-        println!("Disconnected, back to advertising");
-    });
-    let my_service = server.create_service(uuid128!("9b574847-f706-436c-bed7-fc01eb0965c1"));
-    let my_service_characteristic = my_service.lock().create_characteristic(
-        uuid128!("681285a6-247f-48c6-80ad-68c3dce18585"),
-        NimbleProperties::READ | NimbleProperties::NOTIFY,
-    );
-    my_service_characteristic.lock().set_value(b"Start Value");
-    ble_advertiser
-        .lock()
-        .set_data(
-            BLEAdvertisementData::new()
-                .name("Test Server")
-                .add_service_uuid(uuid128!("9b574847-f706-436c-bed7-fc01eb0965c1")),
-        )
-        .unwrap();
-    ble_advertiser.lock().start().unwrap();
-    loop{
-         my_service_characteristic
-            .lock()
-            .set_value(format!("Previous key pressed: {KEY1}").as_bytes())
-            .notify();
-        FreeRtos::delay_ms(1000);
-    }
-}
 
 fn main() -> anyhow::Result<()> {
     esp_idf_sys::link_patches();
-    let mut handle1: esp_idf_sys::TaskHandle_t = ptr::null_mut();
-    let mut peripherals = Peripherals::take()?;
-    let adc2 = AdcDriver::new(peripherals.adc2).unwrap();
-    unsafe {
-        SHARED_ADC2 = Some(adc2);
-    }
-    // Tạo Task:
-    unsafe {
-        // Tạo Task 1
-        xTaskCreatePinnedToCore(
-            Some(task1),
-            CString::new("Task1")?.into_raw(),
-            4096,
-            ptr::null_mut(),
-            4,
-            &mut handle1,
-            1,
-        );
-        // Tạo Task 2 (blink GPIO2)
-        xTaskCreatePinnedToCore(
-            Some(task2),
-            CString::new("Task2")?.into_raw(),
-            4096,
-            ptr::null_mut(),
-            5,
-            ptr::null_mut(),
-            1,
-        );
-    }
-    //setup GPIO for keypad
-    let mut row1 = PinDriver::input(&mut peripherals.pins.gpio23)?;
-    let mut row2 = PinDriver::input(&mut peripherals.pins.gpio19)?;
-    let mut row3 = PinDriver::input(&mut peripherals.pins.gpio18)?;
-    let mut row4 = PinDriver::input(&mut peripherals.pins.gpio5)?;
-    row1.set_pull(Pull::Down)?;
-    row2.set_pull(Pull::Down)?;
-    row3.set_pull(Pull::Down)?;
-    row4.set_pull(Pull::Down)?;
-    row1.set_interrupt_type(InterruptType::AnyEdge)?;
-    row2.set_interrupt_type(InterruptType::AnyEdge)?;
-    row3.set_interrupt_type(InterruptType::AnyEdge)?;
-    row4.set_interrupt_type(InterruptType::AnyEdge)?;
-    let mut col1 = PinDriver::output(&mut peripherals.pins.gpio17)?;
-    let mut col2 = PinDriver::output(&mut peripherals.pins.gpio16)?;
-    let mut col3 = PinDriver::output(&mut peripherals.pins.gpio4)?;
-    let mut col4 = PinDriver::output(&mut peripherals.pins.gpio2)?;
 
-    //setup notification for keypad rows
-    let notification = Notification::new();
-    let notifier1 = notification.notifier();
-    let notifier2 = notification.notifier();
-    let notifier3 = notification.notifier();
-    let notifier4 = notification.notifier();
+    // Init peripherals
+    let peripherals = Peripherals::take().unwrap();
+    let pins = peripherals.pins;
+    // init timer for UART
+    let timer_conf = timer::config::Config::new().auto_reload(false);
+    let mut timer0 = timer::TimerDriver::new(peripherals.timer00, &timer_conf)?;
+    timer0.set_alarm(timer0.tick_hz() / 1000000 * BYTE_TIME_57600)?;
     unsafe {
-        row1.subscribe(move || {
-            notifier1.notify(NonZeroU32::new(1).unwrap());
-        })?;
-        row2.subscribe(move || {
-            notifier2.notify(NonZeroU32::new(1).unwrap());
-        })?;
-        row3.subscribe(move || {
-            notifier3.notify(NonZeroU32::new(1).unwrap());
-        })?;
-        row4.subscribe(move || {
-            notifier4.notify(NonZeroU32::new(1).unwrap());
+        timer0.subscribe(move || {
+            TIMER0_EXPIRED.store(true, Ordering::Relaxed);
         })?;
     }
+    timer0.enable_interrupt()?;
+    timer0.enable_alarm(false)?;
+    timer0.enable(false)?;
+    // UART0: PC ↔ ESP32
+    let uart0 = uart::UartDriver::new(
+        peripherals.uart0,
+        pins.gpio1,  // TX0
+        pins.gpio3,  // RX0
+        Option::<AnyIOPin>::None,
+        Option::<AnyIOPin>::None,
+        &uart::config::Config::default().baudrate(Hertz(115_200)),
+    )?;
+    let mut timer1 = timer::TimerDriver::new(peripherals.timer01, &timer_conf)?;
+    timer1.set_alarm(timer1.tick_hz() / 1000000 * BYTE_TIME_19200)?;
+    unsafe {
+        timer1.subscribe(move || {
+            TIMER1_EXPIRED.store(true, Ordering::Relaxed);
+        })?;
+    }
+    timer1.enable_interrupt()?;
+    timer1.enable_alarm(false)?;
+    timer1.enable(false)?;
+    // UART1: ESP32 ↔ STM32
+    let uart1 = uart::UartDriver::new(
+        peripherals.uart1,
+        pins.gpio12, // TX1
+        pins.gpio13, // RX1
+        Option::<AnyIOPin>::None,   
+        Option::<AnyIOPin>::None,
+        &uart::config::Config::default().baudrate(Hertz(9_600)),
+    )?;
 
-    col1.set_high().unwrap();
-    col2.set_high().unwrap();
-    col3.set_high().unwrap();
-    col4.set_high().unwrap();
+    let m0 = PinDriver::input(pins.gpio4)?; // M0
+    let m1 = PinDriver::input(pins.gpio16)?; // M1
+    let mut aux = PinDriver::output(pins.gpio2)?; // AUX
+    aux.set_high()?; // AUX HIGH ban đầu
 
-    // initialize OLED display:
-    let i2c = peripherals.i2c0;
-    let sda = peripherals.pins.gpio21;
-    let scl = peripherals.pins.gpio22;
+    let mut lower_buffer = Buffer::new(BUFF_SIZE);
+    let mut upper_buffer = Buffer::new(BUFF_SIZE);
+    let mut e32 = E32Module::new();
 
-    let config = I2cConfig::new().baudrate(100.kHz().into());
-    let i2c_driver = I2cDriver::new(i2c, sda, scl, &config)?;
-
-    let interface = I2CDisplayInterface::new(i2c_driver);
-    let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
-        .into_buffered_graphics_mode();
-    display.init().unwrap();
-    
-    
-    //Main loop:
+    let mut state;
+    let mut low_wait = 0;
+    let mut up_wait = 0;
+    let mut low_last_size = 0;
+    let mut up_last_size = 0;
+    let mut buf = [0_u8; 1];
+    let mut buf1 = [0_u8; 1];
+    let mut params_buf = [0_u8; CONF_SIZE];
+    uart0.write(b"ESP32 E32 Module Bridge\n")?;
     loop {
-        row1.enable_interrupt()?;
-        row2.enable_interrupt()?;
-        row3.enable_interrupt()?;
-        row4.enable_interrupt()?;
-        let bitset = notification.wait(esp_idf_hal::delay::BLOCK);
-        match bitset {
-            Some(nz) if nz.get() == 1 => {
-                if let Some(key) = read_keypad(
-                    &mut row1, &mut row2, &mut row3, &mut row4,
-                    &mut col1, &mut col2, &mut col3, &mut col4,
-                ) {
-                    if Some(key) != Some('e') {
-                        unsafe{
-                            KEY1 = key;
+        // Check state change
+        let new_state = match (m0.is_high(), m1.is_high()) {
+            (false, false) => E32State::Normal,
+            (true, false) => E32State::WakeUp,
+            (false, true) => E32State::PowerSaving,
+            (true, true) => E32State::Sleep,
+        };
+        state = new_state;
+        match state {
+            E32State::Normal => {
+                // Read from UART0 (PC) → upper buffer
+                while let Ok(_b) = uart0.read(&mut buf, BLOCK) {
+                    upper_buffer.enqueue(buf[0]);
+                }
+
+                // Read from UART1 (STM32) → lower buffer
+                while let Ok(_b) = uart0.read(&mut buf1, BLOCK) {
+                    lower_buffer.enqueue(buf1[0]);
+                }
+
+                // Handle lower_buffer → UART1
+                if lower_buffer.available() > 0 {
+                    let current_size = lower_buffer.available();
+                    if current_size != low_last_size {
+                        TIMER0_EXPIRED.store(false, Ordering::Relaxed);
+                        timer0.enable_alarm(true)?;
+                        timer0.enable(true)?;
+                        low_wait = 0;
+                        low_last_size = current_size;
+                    } else if TIMER0_EXPIRED.load(Ordering::Relaxed) {
+                        TIMER0_EXPIRED.store(false, Ordering::Relaxed);
+                        timer0.enable(true)?;
+                        timer0.enable_alarm(true)?;
+                        low_wait += 1;
+                        if low_wait >= MAX_WAIT_TIMES {
+                            TIMER0_EXPIRED.store(false, Ordering::Relaxed);
+                            timer0.enable(false)?;
+                            timer0.enable_alarm(false)?;
+                            aux.set_low()?;
+                            let data = lower_buffer.deallqueue();
+                            uart1.write(&data)?;
+                            aux.set_high()?;
                         }
-                        println!("[Main] Phím nhấn: {}", key);
-                        let data: &[u8; 1024] = image_return(key).expect("Failed to get image data");
-                        let image = ImageRaw::<BinaryColor>::new(data, 128);
-                        embedded_graphics::image::Image::new(&image, Point::zero())
-                        .draw(&mut display).unwrap();
-                        display.flush().unwrap();
+                    }
+                }
+
+                // Handle upper_buffer → UART0
+                if upper_buffer.available() > 0 {
+                    let current_size = upper_buffer.available();
+                    if current_size != up_last_size {
+                        TIMER1_EXPIRED.store(false, Ordering::Relaxed);
+                        timer0.enable(true)?;
+                        timer0.enable_alarm(true)?;
+                        up_wait = 0;
+                        up_last_size = current_size;
+                    } else if TIMER1_EXPIRED.load(Ordering::Relaxed){
+                        TIMER1_EXPIRED.store(false, Ordering::Relaxed);
+                        timer0.enable(true)?;
+                        timer0.enable_alarm(true)?;
+                        up_wait += 1;
+                        if up_wait >= MAX_WAIT_TIMES {
+                            TIMER1_EXPIRED.store(false, Ordering::Relaxed);
+                            timer0.enable(false)?;
+                            timer0.enable_alarm(false)?;
+                            aux.set_low()?;
+                            aux.set_low()?;
+                            let data = upper_buffer.deallqueue();
+                            uart0.write(&data)?;
+                            aux.set_high()?;
+                        }
                     }
                 }
             }
-            Some(_) => {}
-            None => {}
+            E32State::Sleep => {
+                if let Ok(_b) = uart1.read(&mut params_buf, BLOCK) {
+                    aux.set_low()?;
+                    let result = e32.input_command(&params_buf.as_ref(), params_buf.len());
+                    uart1.write(result.as_bytes())?;
+                    let new_baud_rate = match e32.uart_bps {
+                        UartBps::Bps1200 => Hertz(1200),
+                        UartBps::Bps2400 => Hertz(2400),
+                        UartBps::Bps4800 => Hertz(4800),
+                        UartBps::Bps9600 => Hertz(9600),
+                        UartBps::Bps19200 => Hertz(19200),
+                        UartBps::Bps38400 => Hertz(38400),
+                        UartBps::Bps57600 => Hertz(57600),
+                        UartBps::Bps115200 => Hertz(115200),
+
+                    };
+                    let new_air_data_rate = match e32.air_data_rate {
+                        AirDataRate::Rate300 => Hertz(300),
+                        AirDataRate::Rate1200 => Hertz(1200),
+                        AirDataRate::Rate2400 => Hertz(2400),
+                        AirDataRate::Rate4800 => Hertz(4800),
+                        AirDataRate::Rate9600 => Hertz(9600),
+                        AirDataRate::Rate19200 => Hertz(19200),
+                    };
+                    uart0.change_baudrate(new_air_data_rate)?;
+                    uart1.change_baudrate(new_baud_rate)?;
+                    aux.set_high()?;
+                }
+            }
+            _ => {
+                // TODO: WAKE_UP / POWER_SAVING mode
+            }
         }
     }
 }
