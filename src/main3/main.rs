@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
     // init timer for UART
     let timer_conf = timer::config::Config::new().auto_reload(false);
     let mut timer0 = timer::TimerDriver::new(peripherals.timer00, &timer_conf)?;
-    timer0.set_alarm(timer0.tick_hz() / 1000000 * BYTE_TIME_57600)?;
+    timer0.set_alarm(timer0.tick_hz() / 1000000 * BYTE_TIME_19200)?;
     unsafe {
         timer0.subscribe(move || {
             TIMER0_EXPIRED.store(true, Ordering::Relaxed);
@@ -43,10 +43,10 @@ fn main() -> anyhow::Result<()> {
         pins.gpio3,  // RX0
         Option::<AnyIOPin>::None,
         Option::<AnyIOPin>::None,
-        &uart::config::Config::default().baudrate(Hertz(115_200)),
+        &uart::config::Config::default().baudrate(Hertz(19200)),
     )?;
     let mut timer1 = timer::TimerDriver::new(peripherals.timer01, &timer_conf)?;
-    timer1.set_alarm(timer1.tick_hz() / 1000000 * BYTE_TIME_19200)?;
+    timer1.set_alarm(timer1.tick_hz() / 1000000 * BYTE_TIME_57600)?;
     unsafe {
         timer1.subscribe(move || {
             TIMER1_EXPIRED.store(true, Ordering::Relaxed);
@@ -62,7 +62,7 @@ fn main() -> anyhow::Result<()> {
         pins.gpio13, // RX1
         Option::<AnyIOPin>::None,   
         Option::<AnyIOPin>::None,
-        &uart::config::Config::default().baudrate(Hertz(9_600)),
+        &uart::config::Config::default().baudrate(Hertz(57600)),
     )?;
 
     let m0 = PinDriver::input(pins.gpio4)?; // M0
@@ -100,7 +100,7 @@ fn main() -> anyhow::Result<()> {
                 }
 
                 // Read from UART1 (STM32) → lower buffer
-                while let Ok(_b) = uart0.read(&mut buf1, BLOCK) {
+                while let Ok(_b) = uart1.read(&mut buf1, BLOCK) {
                     lower_buffer.enqueue(buf1[0]);
                 }
 
@@ -108,20 +108,20 @@ fn main() -> anyhow::Result<()> {
                 if lower_buffer.available() > 0 {
                     let current_size = lower_buffer.available();
                     if current_size != low_last_size {
-                        TIMER0_EXPIRED.store(false, Ordering::Relaxed);
-                        timer0.enable_alarm(true)?;
-                        timer0.enable(true)?;
+                        TIMER1_EXPIRED.store(false, Ordering::Relaxed);
+                        timer1.enable_alarm(true)?;
+                        timer1.enable(true)?;
                         low_wait = 0;
                         low_last_size = current_size;
-                    } else if TIMER0_EXPIRED.load(Ordering::Relaxed) {
-                        TIMER0_EXPIRED.store(false, Ordering::Relaxed);
-                        timer0.enable(true)?;
-                        timer0.enable_alarm(true)?;
+                    } else if TIMER1_EXPIRED.load(Ordering::Relaxed) {
+                        TIMER1_EXPIRED.store(false, Ordering::Relaxed);
+                        timer1.enable(true)?;
+                        timer1.enable_alarm(true)?;
                         low_wait += 1;
                         if low_wait >= MAX_WAIT_TIMES {
-                            TIMER0_EXPIRED.store(false, Ordering::Relaxed);
-                            timer0.enable(false)?;
-                            timer0.enable_alarm(false)?;
+                            TIMER1_EXPIRED.store(false, Ordering::Relaxed);
+                            timer1.enable(false)?;
+                            timer1.enable_alarm(false)?;
                             aux.set_low()?;
                             let data = lower_buffer.deallqueue();
                             uart1.write(&data)?;
@@ -134,18 +134,18 @@ fn main() -> anyhow::Result<()> {
                 if upper_buffer.available() > 0 {
                     let current_size = upper_buffer.available();
                     if current_size != up_last_size {
-                        TIMER1_EXPIRED.store(false, Ordering::Relaxed);
+                        TIMER0_EXPIRED.store(false, Ordering::Relaxed);
                         timer0.enable(true)?;
                         timer0.enable_alarm(true)?;
                         up_wait = 0;
                         up_last_size = current_size;
-                    } else if TIMER1_EXPIRED.load(Ordering::Relaxed){
-                        TIMER1_EXPIRED.store(false, Ordering::Relaxed);
+                    } else if TIMER0_EXPIRED.load(Ordering::Relaxed){
+                        TIMER0_EXPIRED.store(false, Ordering::Relaxed);
                         timer0.enable(true)?;
                         timer0.enable_alarm(true)?;
                         up_wait += 1;
                         if up_wait >= MAX_WAIT_TIMES {
-                            TIMER1_EXPIRED.store(false, Ordering::Relaxed);
+                            TIMER0_EXPIRED.store(false, Ordering::Relaxed);
                             timer0.enable(false)?;
                             timer0.enable_alarm(false)?;
                             aux.set_low()?;
