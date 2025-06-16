@@ -96,13 +96,13 @@ fn main() -> anyhow::Result<()> {
             E32State::Normal => {
                 uart0.write(b"Normal")?;
                 // Read from UART0 (PC) → upper buffer
-                while let Ok(_b) = uart0.read(&mut buf, BLOCK) {
+                while let Ok(_b) = uart0.read(&mut buf, BLOCK) { // maybe error here
                     uart0.write(b"read from UART0\n")?;
                     upper_buffer.enqueue(buf[0]);
                 }
-
+                
                 // Read from UART1 (STM32) → lower buffer
-                while let Ok(_b) = uart1.read(&mut buf1, BLOCK) {
+                while let Ok(_b) = uart1.read(&mut buf1, BLOCK) { // and also here
                     println!("Read from UART1: {}", buf1[0]);
                     lower_buffer.enqueue(buf1[0]);
                 }
