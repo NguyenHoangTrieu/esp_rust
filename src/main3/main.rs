@@ -94,10 +94,10 @@ fn main() -> anyhow::Result<()> {
         state = new_state;
         match state {
             E32State::Normal => {
-                println!("State: Normal");
+                uart0.write(b"Normal")?;
                 // Read from UART0 (PC) → upper buffer
                 while let Ok(_b) = uart0.read(&mut buf, BLOCK) {
-                    println!("Read from UART0: {}", buf[0]);
+                    uart0.write(b"read from UART0\n")?;
                     upper_buffer.enqueue(buf[0]);
                 }
 
