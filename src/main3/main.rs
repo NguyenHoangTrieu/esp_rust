@@ -159,6 +159,7 @@ fn main() -> anyhow::Result<()> {
                 }
             }
             E32State::Sleep => {
+                println!("State: Sleep");
                 if let Ok(_b) = uart1.read(&mut params_buf, BLOCK) {
                     aux.set_low()?;
                     let result = e32.input_command(&params_buf.as_ref(), params_buf.len());
@@ -188,6 +189,7 @@ fn main() -> anyhow::Result<()> {
                 }
             }
             _ => {
+                println!("State: WakeUp/PowerSaving");
                 // TODO: WAKE_UP / POWER_SAVING mode
             }
         }
