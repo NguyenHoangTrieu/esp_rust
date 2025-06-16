@@ -124,7 +124,7 @@ fn main() -> anyhow::Result<()> {
                             timer1.enable_alarm(false)?;
                             aux.set_low()?;
                             let data = lower_buffer.deallqueue();
-                            uart1.write(&data)?;
+                            uart0.write(&data)?;
                             aux.set_high()?;
                         }
                     }
@@ -151,7 +151,7 @@ fn main() -> anyhow::Result<()> {
                             aux.set_low()?;
                             aux.set_low()?;
                             let data = upper_buffer.deallqueue();
-                            uart0.write(&data)?;
+                            uart1.write(&data)?;
                             aux.set_high()?;
                         }
                     }
