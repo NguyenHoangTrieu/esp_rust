@@ -2,6 +2,8 @@ use esp_idf_hal::gpio::*;
 use esp_idf_hal::prelude::*;
 use esp_idf_hal::delay::*;
 use esp_idf_hal::*;
+use esp_idf_svc::timer::*;
+use std::time::Duration;
 use core::sync::atomic::{AtomicBool, Ordering};
 mod simulator{
     pub mod e32_module;
@@ -25,17 +27,13 @@ fn main() -> anyhow::Result<()> {
     let peripherals = Peripherals::take().unwrap();
     let pins = peripherals.pins;
     // init timer for UART
-    let timer_conf = timer::config::Config::new().auto_reload(false);
-    let mut timer0 = timer::TimerDriver::new(peripherals.timer00, &timer_conf)?;
-    timer0.set_alarm(timer0.tick_hz() / 1000000 * BYTE_TIME_19200)?;
-    unsafe {
-        timer0.subscribe(move || {
-            TIMER0_EXPIRED.store(true, Ordering::Relaxed);
-        })?;
-    }
-    timer0.enable_interrupt()?;
-    timer0.enable_alarm(false)?;
-    timer0.enable(false)?;
+    let timer_service = EspTimerService::new()?;
+    let timer0 = timer_service.timer(move || {
+        TIMER0_EXPIRED.store(true, Ordering::Relaxed);
+    })?;
+    let timer1 = timer_service.timer(move || {
+        TIMER1_EXPIRED.store(true, Ordering::Relaxed);
+    })?;
     // UART0: PC ↔ ESP32
     let uart0 = uart::UartDriver::new(
         peripherals.uart0,
@@ -45,16 +43,7 @@ fn main() -> anyhow::Result<()> {
         Option::<AnyIOPin>::None,
         &uart::config::Config::default().baudrate(Hertz(19200)),
     )?;
-    let mut timer1 = timer::TimerDriver::new(peripherals.timer01, &timer_conf)?;
-    timer1.set_alarm(timer1.tick_hz() / 1000000 * BYTE_TIME_57600)?;
-    unsafe {
-        timer1.subscribe(move || {
-            TIMER1_EXPIRED.store(true, Ordering::Relaxed);
-        })?;
-    }
-    timer1.enable_interrupt()?;
-    timer1.enable_alarm(false)?;
-    timer1.enable(false)?;
+
     // UART1: ESP32 ↔ STM32
     let uart1 = uart::UartDriver::new(
         peripherals.uart1,
@@ -79,8 +68,8 @@ fn main() -> anyhow::Result<()> {
     let mut up_wait = 0;
     let mut low_last_size = 0;
     let mut up_last_size = 0;
-    let mut buf = [0_u8; 1];
-    let mut buf1 = [0_u8; 1];
+    let mut buf:[u8; BUFF_SIZE] = [0; BUFF_SIZE];
+    let mut buf1: [u8; BUFF_SIZE] = [0; BUFF_SIZE];
     let mut params_buf = [0_u8; CONF_SIZE];
     uart0.write(b"ESP32 E32 Module Bridge\n")?;
     loop {
@@ -94,40 +83,39 @@ fn main() -> anyhow::Result<()> {
         state = new_state;
         match state {
             E32State::Normal => {
-                uart0.write(b"Normal")?;
                 // Read from UART0 (PC) → upper buffer
-                while let Ok(_b) = uart0.read(&mut buf, BLOCK) { // maybe error here
-                    uart0.write(b"read from UART0\n")?;
-                    upper_buffer.enqueue(buf[0]);
+                let b = uart0.read(&mut buf, BLOCK); 
+                if let Ok(n) = b {
+                    for i in 0..n {
+                        upper_buffer.enqueue(buf[i]);
+                    }
                 }
-                
+
                 // Read from UART1 (STM32) → lower buffer
-                while let Ok(_b) = uart1.read(&mut buf1, BLOCK) { // and also here
-                    println!("Read from UART1: {}", buf1[0]);
-                    lower_buffer.enqueue(buf1[0]);
-                }
+                let b = uart1.read(&mut buf1, BLOCK); 
+                if let Ok(n) = b {
+                    for i in 0..n {
+                        lower_buffer.enqueue(buf1[i]);
+                    }
+                } 
 
                 // Handle lower_buffer → UART1
                 if lower_buffer.available() > 0 {
                     let current_size = lower_buffer.available();
                     if current_size != low_last_size {
                         TIMER1_EXPIRED.store(false, Ordering::Relaxed);
-                        timer1.enable_alarm(true)?;
-                        timer1.enable(true)?;
+                        timer1.after(Duration::from_micros(BYTE_TIME_57600))?;
                         low_wait = 0;
                         low_last_size = current_size;
                     } else if TIMER1_EXPIRED.load(Ordering::Relaxed) {
                         TIMER1_EXPIRED.store(false, Ordering::Relaxed);
-                        timer1.enable(true)?;
-                        timer1.enable_alarm(true)?;
+                        timer1.after(Duration::from_micros(BYTE_TIME_57600))?;
                         low_wait += 1;
                         if low_wait >= MAX_WAIT_TIMES {
                             TIMER1_EXPIRED.store(false, Ordering::Relaxed);
-                            timer1.enable(false)?;
-                            timer1.enable_alarm(false)?;
                             aux.set_low()?;
                             let data = lower_buffer.deallqueue();
-                            uart0.write(&data)?;
+                            uart1.write(&data)?;
                             aux.set_high()?;
                         }
                     }
@@ -138,30 +126,25 @@ fn main() -> anyhow::Result<()> {
                     let current_size = upper_buffer.available();
                     if current_size != up_last_size {
                         TIMER0_EXPIRED.store(false, Ordering::Relaxed);
-                        timer0.enable(true)?;
-                        timer0.enable_alarm(true)?;
+                        timer0.after(Duration::from_micros(BYTE_TIME_19200))?;
                         up_wait = 0;
                         up_last_size = current_size;
                     } else if TIMER0_EXPIRED.load(Ordering::Relaxed){
                         TIMER0_EXPIRED.store(false, Ordering::Relaxed);
-                        timer0.enable(true)?;
-                        timer0.enable_alarm(true)?;
+                        timer0.after(Duration::from_micros(BYTE_TIME_19200))?;
                         up_wait += 1;
                         if up_wait >= MAX_WAIT_TIMES {
                             TIMER0_EXPIRED.store(false, Ordering::Relaxed);
-                            timer0.enable(false)?;
-                            timer0.enable_alarm(false)?;
                             aux.set_low()?;
                             aux.set_low()?;
                             let data = upper_buffer.deallqueue();
-                            uart1.write(&data)?;
+                            uart0.write(&data)?;
                             aux.set_high()?;
                         }
                     }
                 }
             }
             E32State::Sleep => {
-                println!("State: Sleep");
                 if let Ok(_b) = uart1.read(&mut params_buf, BLOCK) {
                     aux.set_low()?;
                     let result = e32.input_command(&params_buf.as_ref(), params_buf.len());
@@ -191,7 +174,6 @@ fn main() -> anyhow::Result<()> {
                 }
             }
             _ => {
-                println!("State: WakeUp/PowerSaving");
                 // TODO: WAKE_UP / POWER_SAVING mode
             }
         }
