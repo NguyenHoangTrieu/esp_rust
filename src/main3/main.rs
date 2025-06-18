@@ -13,7 +13,7 @@ use simulator::e32_module::*;
 use simulator::buffer::*;
 
 const BUFF_SIZE: usize = 256;
-const MAX_WAIT_TIMES: u8 = 3;
+const MAX_WAIT_TIMES: u64 = 3;
 const BYTE_TIME_57600: u64 = 70*2;  // us
 const BYTE_TIME_19200: u64 = 416;   // us
 static TIMER0_EXPIRED: AtomicBool = AtomicBool::new(false);
