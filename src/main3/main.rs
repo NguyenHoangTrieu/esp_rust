@@ -84,16 +84,17 @@ fn main() -> anyhow::Result<()> {
         match state {
             E32State::Normal => {
                 // Read from UART0 (PC) → upper buffer
-                let b = uart0.read(&mut buf, BLOCK).unwrap(); 
-                for i in 0..b {
-                    upper_buffer.enqueue(buf[i]);
-                }
+                let b = uart0.read(&mut buf, BLOCK).unwrap();
+                    for i in 0..b {
+                        upper_buffer.enqueue(buf[i]);
+                    }
 
                 // Read from UART1 (STM32) → lower buffer
-                let b = uart1.read(&mut buf1, BLOCK).unwrap(); 
-                for i in 0..b {
-                    lower_buffer.enqueue(buf1[i]);
-                }
+                let b = uart1.read(&mut buf1, BLOCK).unwrap();
+                    for i in 0..b {
+                        println!("Received from STM32: {}", buf1[i]);
+                        lower_buffer.enqueue(buf1[i]);
+                    }
 
                 // Handle lower_buffer → UART1
                 if lower_buffer.available() > 0 {
