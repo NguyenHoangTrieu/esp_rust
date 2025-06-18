@@ -85,59 +85,42 @@ fn main() -> anyhow::Result<()> {
             E32State::Normal => {
                 // Read from UART0 (PC) → upper buffer
                 let b = uart0.read(&mut buf, BLOCK).unwrap();
+                if b > 0 {
                     for i in 0..b {
+                        println!("Received from PC: {}", buf[i]);
                         upper_buffer.enqueue(buf[i]);
                     }
-
+                }
                 // Read from UART1 (STM32) → lower buffer
-                let b = uart1.read(&mut buf1, BLOCK).unwrap();
-                    for i in 0..b {
+                let b1 = uart1.read(&mut buf1, BLOCK).unwrap();
+                if b1 > 0 {
+                    for i in 0..b1 {
                         println!("Received from STM32: {}", buf1[i]);
                         lower_buffer.enqueue(buf1[i]);
                     }
+                }
 
-                // Handle lower_buffer → UART1
+                // Handle lower_buffer → UART0
                 if lower_buffer.available() > 0 {
-                    let current_size = lower_buffer.available();
-                    if current_size != low_last_size {
+                    timer1.after(Duration::from_micros(BYTE_TIME_57600 * MAX_WAIT_TIMES))?;
+                    if TIMER1_EXPIRED.load(Ordering::Relaxed) {
                         TIMER1_EXPIRED.store(false, Ordering::Relaxed);
-                        timer1.after(Duration::from_micros(BYTE_TIME_57600))?;
-                        low_wait = 0;
-                        low_last_size = current_size;
-                    } else if TIMER1_EXPIRED.load(Ordering::Relaxed) {
-                        TIMER1_EXPIRED.store(false, Ordering::Relaxed);
-                        timer1.after(Duration::from_micros(BYTE_TIME_57600))?;
-                        low_wait += 1;
-                        if low_wait >= MAX_WAIT_TIMES {
-                            TIMER1_EXPIRED.store(false, Ordering::Relaxed);
-                            aux.set_low()?;
-                            let data = lower_buffer.deallqueue();
-                            uart1.write(&data)?;
-                            aux.set_high()?;
-                        }
+                        aux.set_low()?;
+                        let data = lower_buffer.deallqueue();
+                        uart0.write(&data)?;
+                        aux.set_high()?;
                     }
                 }
 
-                // Handle upper_buffer → UART0
+                // Handle upper_buffer → UART1
                 if upper_buffer.available() > 0 {
-                    let current_size = upper_buffer.available();
-                    if current_size != up_last_size {
+                    timer0.after(Duration::from_micros(BYTE_TIME_19200 * MAX_WAIT_TIMES))?;
+                    if TIMER0_EXPIRED.load(Ordering::Relaxed) {
                         TIMER0_EXPIRED.store(false, Ordering::Relaxed);
-                        timer0.after(Duration::from_micros(BYTE_TIME_19200))?;
-                        up_wait = 0;
-                        up_last_size = current_size;
-                    } else if TIMER0_EXPIRED.load(Ordering::Relaxed){
-                        TIMER0_EXPIRED.store(false, Ordering::Relaxed);
-                        timer0.after(Duration::from_micros(BYTE_TIME_19200))?;
-                        up_wait += 1;
-                        if up_wait >= MAX_WAIT_TIMES {
-                            TIMER0_EXPIRED.store(false, Ordering::Relaxed);
-                            aux.set_low()?;
-                            aux.set_low()?;
-                            let data = upper_buffer.deallqueue();
-                            uart0.write(&data)?;
-                            aux.set_high()?;
-                        }
+                        aux.set_low()?;
+                        let data = upper_buffer.deallqueue();
+                        uart1.write(&data)?;
+                        aux.set_high()?;
                     }
                 }
             }
