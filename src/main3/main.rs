@@ -117,10 +117,11 @@ fn main() -> anyhow::Result<()> {
                         TIMER1_EXPIRED.store(false, Ordering::Relaxed);
                         let data = lower_buffer.deallqueue();
                         uart0.write(&data)?;
-                        aux.set_high()?;
                     }
                 }
-
+                if lower_buffer.available() == 0 {
+                    aux.set_high()?;
+                }
                 // Handle upper_buffer → UART1
                 if upper_buffer.available() > 0 {
                     timer0.after(Duration::from_micros(BYTE_TIME_19200 * MAX_WAIT_TIMES))?;
