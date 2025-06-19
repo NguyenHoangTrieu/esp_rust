@@ -113,11 +113,11 @@ fn main() -> anyhow::Result<()> {
                 }
                 // Handle lower_buffer → UART0
                 if lower_buffer.available() > 0 {
-                    timer1.after(Duration::from_micros(BYTE_TIME_57600))?;
+                    aux.set_low()?;
+                    timer1.after(Duration::from_micros(BYTE_TIME_57600 * MAX_WAIT_TIMES))?;
                     if TIMER1_EXPIRED.load(Ordering::Relaxed) {
                         TIMER1_EXPIRED.store(false, Ordering::Relaxed);
                         let data = lower_buffer.deallqueue();
-                        aux.set_low()?;
                         uart0.write(&data)?;
                         aux.set_high()?;
                     }
@@ -125,11 +125,11 @@ fn main() -> anyhow::Result<()> {
 
                 // Handle upper_buffer → UART1
                 if upper_buffer.available() > 0 {
-                    timer0.after(Duration::from_micros(BYTE_TIME_19200))?;
+                    aux.set_low()?;
+                    timer0.after(Duration::from_micros(BYTE_TIME_19200 * MAX_WAIT_TIMES))?;
                     if TIMER0_EXPIRED.load(Ordering::Relaxed) {
                         TIMER0_EXPIRED.store(false, Ordering::Relaxed);
                         let data = upper_buffer.deallqueue();
-                        aux.set_low()?;
                         uart1.write(&data)?;
                         aux.set_high()?;
                     }
