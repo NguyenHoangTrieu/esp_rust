@@ -117,6 +117,7 @@ fn main() -> anyhow::Result<()> {
                         TIMER1_EXPIRED.store(false, Ordering::Relaxed);
                         let data = lower_buffer.deallqueue();
                         uart0.write(&data)?;
+                        println!("Sent to UART0: {}", lower_buffer.available());
                     }
                 }
                 if lower_buffer.available() == 0 {
