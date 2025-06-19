@@ -47,6 +47,7 @@ impl Buffer {
         while let Some(b) = self.dequeue() {
             result.push(b);
         }
+        self.size = 0; // Reset size after deallqueue
         result
     }
 
