@@ -87,9 +87,12 @@ fn main() -> anyhow::Result<()> {
                     Err(_) => {}
                 }
                 if b > 0 {
-                    for i in 0..b {
-                        upper_buffer.enqueue(buf[i]);
+                    aux.set_low()?;
+                    for x in buf.iter_mut() {
+                        upper_buffer.enqueue(*x);
+                        *x = 0;
                     }
+                    //let _ = buf.iter().map(|x| upper_buffer.enqueue(*x));
                 }
                 // Read from UART1 (STM32) → lower buffer
                 match uart1.read(&mut buf1, 100){
@@ -98,17 +101,18 @@ fn main() -> anyhow::Result<()> {
 
                 }
                 if b1 > 0 {
-                    for i in 0..b1 {
-                        lower_buffer.enqueue(buf1[i]);
+                    aux.set_low()?;
+                    for x in buf1.iter_mut() {
+                        lower_buffer.enqueue(*x);
+                        *x = 0;
                     }
+                    //let _ = buf1.iter().map(|x| lower_buffer.enqueue(*x));
                 }
-
                 // Handle lower_buffer → UART0
                 if lower_buffer.available() > 0 {
                     timer1.after(Duration::from_micros(BYTE_TIME_57600 * MAX_WAIT_TIMES))?;
                     if TIMER1_EXPIRED.load(Ordering::Relaxed) {
                         TIMER1_EXPIRED.store(false, Ordering::Relaxed);
-                        aux.set_low()?;
                         let data = lower_buffer.deallqueue();
                         uart0.write(&data)?;
                         aux.set_high()?;
@@ -120,7 +124,6 @@ fn main() -> anyhow::Result<()> {
                     timer0.after(Duration::from_micros(BYTE_TIME_19200 * MAX_WAIT_TIMES))?;
                     if TIMER0_EXPIRED.load(Ordering::Relaxed) {
                         TIMER0_EXPIRED.store(false, Ordering::Relaxed);
-                        aux.set_low()?;
                         let data = upper_buffer.deallqueue();
                         uart1.write(&data)?;
                         aux.set_high()?;
