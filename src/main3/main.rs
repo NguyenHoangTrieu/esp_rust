@@ -64,14 +64,12 @@ fn main() -> anyhow::Result<()> {
     let mut e32 = E32Module::new();
 
     let mut state;
-    let mut low_wait = 0;
-    let mut up_wait = 0;
-    let mut low_last_size = 0;
-    let mut up_last_size = 0;
     let mut buf:[u8; BUFF_SIZE] = [0; BUFF_SIZE];
     let mut buf1: [u8; BUFF_SIZE] = [0; BUFF_SIZE];
     let mut params_buf = [0_u8; CONF_SIZE];
     uart0.write(b"ESP32 E32 Module Bridge\n")?;
+    let mut b = 0;
+    let mut b1 = 0;
     loop {
         // Check state change
         let new_state = match (m0.is_high(), m1.is_high()) {
@@ -84,18 +82,23 @@ fn main() -> anyhow::Result<()> {
         match state {
             E32State::Normal => {
                 // Read from UART0 (PC) → upper buffer
-                let b = uart0.read(&mut buf, BLOCK).unwrap();
+                match uart0.read(&mut buf, 100){
+                    Ok (n)=> b = n,
+                    Err(_) => {}
+                }
                 if b > 0 {
                     for i in 0..b {
-                        println!("Received from PC: {}", buf[i]);
                         upper_buffer.enqueue(buf[i]);
                     }
                 }
                 // Read from UART1 (STM32) → lower buffer
-                let b1 = uart1.read(&mut buf1, BLOCK).unwrap();
+                match uart1.read(&mut buf1, 100){
+                    Ok (n)=> b1 = n,
+                    Err(_) => {}
+
+                }
                 if b1 > 0 {
                     for i in 0..b1 {
-                        println!("Received from STM32: {}", buf1[i]);
                         lower_buffer.enqueue(buf1[i]);
                     }
                 }
