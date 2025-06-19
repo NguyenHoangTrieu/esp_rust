@@ -83,7 +83,7 @@ fn main() -> anyhow::Result<()> {
             E32State::Normal => {
                 // Read from UART0 (PC) → upper buffer
                 match uart0.read(&mut buf, 100){
-                    Ok (n)=> b = n,
+                    Ok (n)=> {aux.set_low()?; b = n},
                     Err(_) => {}
                 }
                 if b > 0 {
