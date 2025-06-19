@@ -82,11 +82,13 @@ fn main() -> anyhow::Result<()> {
         match state {
             E32State::Normal => {
                 // Read from UART0 (PC) → upper buffer
+                aux.set_high()?;
                 match uart0.read(&mut buf, 100){
-                    Ok (n)=> {aux.set_low()?; b = n},
+                    Ok (n)=> {b = n},
                     Err(_) => {}
                 }
                 if b > 0 {
+                    aux.set_low()?;
                     for x in buf.iter_mut() {
                         upper_buffer.enqueue(*x);
                         *x = 0;
@@ -100,6 +102,7 @@ fn main() -> anyhow::Result<()> {
 
                 }
                 if b1 > 0 {
+                    aux.set_low()?;
                     for x in buf1.iter_mut() {
                         lower_buffer.enqueue(*x);
                         *x = 0;
@@ -112,7 +115,6 @@ fn main() -> anyhow::Result<()> {
                     if TIMER1_EXPIRED.load(Ordering::Relaxed) {
                         TIMER1_EXPIRED.store(false, Ordering::Relaxed);
                         let data = lower_buffer.deallqueue();
-                        aux.set_low()?;
                         uart0.write(&data)?;
                         aux.set_high()?;
                     }
@@ -124,7 +126,6 @@ fn main() -> anyhow::Result<()> {
                     if TIMER0_EXPIRED.load(Ordering::Relaxed) {
                         TIMER0_EXPIRED.store(false, Ordering::Relaxed);
                         let data = upper_buffer.deallqueue();
-                        aux.set_low()?;
                         uart1.write(&data)?;
                         aux.set_high()?;
                     }
