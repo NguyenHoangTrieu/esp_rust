@@ -82,7 +82,7 @@ fn main() -> anyhow::Result<()> {
         match state {
             E32State::Normal => {
                 // Read from UART0 (PC) → upper buffer
-                aux.set_high()?;
+
                 match uart0.read(&mut buf, 100){
                     Ok (n)=> {b = n},
                     Err(_) => {}
@@ -119,6 +119,7 @@ fn main() -> anyhow::Result<()> {
                         let data = lower_buffer.deallqueue();
                         aux.set_low()?;
                         uart0.write(&data)?;
+                        aux.set_high()?;
                     }
                 }
 
@@ -130,6 +131,7 @@ fn main() -> anyhow::Result<()> {
                         let data = upper_buffer.deallqueue();
                         aux.set_low()?;
                         uart1.write(&data)?;
+                        aux.set_high()?;
                     }
                 }
             }
