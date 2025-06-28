@@ -2,6 +2,8 @@ use esp_idf_hal::gpio::*;
 use esp_idf_hal::prelude::*;
 use esp_idf_hal::delay::*;
 use esp_idf_hal::*;
+use esp_idf_svc::timer::*;
+use std::time::Duration;
 use core::sync::atomic::{AtomicBool, Ordering};
 mod simulator{
     pub mod e32_module;
@@ -11,7 +13,7 @@ use simulator::e32_module::*;
 use simulator::buffer::*;
 
 const BUFF_SIZE: usize = 256;
-const MAX_WAIT_TIMES: u8 = 3;
+const MAX_WAIT_TIMES: u64 = 3;
 const BYTE_TIME_57600: u64 = 70*2;  // us
 const BYTE_TIME_19200: u64 = 416;   // us
 static TIMER0_EXPIRED: AtomicBool = AtomicBool::new(false);
@@ -25,17 +27,13 @@ fn main() -> anyhow::Result<()> {
     let peripherals = Peripherals::take().unwrap();
     let pins = peripherals.pins;
     // init timer for UART
-    let timer_conf = timer::config::Config::new().auto_reload(false);
-    let mut timer0 = timer::TimerDriver::new(peripherals.timer00, &timer_conf)?;
-    timer0.set_alarm(timer0.tick_hz() / 1000000 * BYTE_TIME_57600)?;
-    unsafe {
-        timer0.subscribe(move || {
-            TIMER0_EXPIRED.store(true, Ordering::Relaxed);
-        })?;
-    }
-    timer0.enable_interrupt()?;
-    timer0.enable_alarm(false)?;
-    timer0.enable(false)?;
+    let timer_service = EspTimerService::new()?;
+    let timer0 = timer_service.timer(move || {
+        TIMER0_EXPIRED.store(true, Ordering::Relaxed);
+    })?;
+    let timer1 = timer_service.timer(move || {
+        TIMER1_EXPIRED.store(true, Ordering::Relaxed);
+    })?;
     // UART0: PC ↔ ESP32
     let uart0 = uart::UartDriver::new(
         peripherals.uart0,
@@ -43,18 +41,9 @@ fn main() -> anyhow::Result<()> {
         pins.gpio3,  // RX0
         Option::<AnyIOPin>::None,
         Option::<AnyIOPin>::None,
-        &uart::config::Config::default().baudrate(Hertz(115_200)),
+        &uart::config::Config::default().baudrate(Hertz(19200)),
     )?;
-    let mut timer1 = timer::TimerDriver::new(peripherals.timer01, &timer_conf)?;
-    timer1.set_alarm(timer1.tick_hz() / 1000000 * BYTE_TIME_19200)?;
-    unsafe {
-        timer1.subscribe(move || {
-            TIMER1_EXPIRED.store(true, Ordering::Relaxed);
-        })?;
-    }
-    timer1.enable_interrupt()?;
-    timer1.enable_alarm(false)?;
-    timer1.enable(false)?;
+
     // UART1: ESP32 ↔ STM32
     let uart1 = uart::UartDriver::new(
         peripherals.uart1,
@@ -62,7 +51,7 @@ fn main() -> anyhow::Result<()> {
         pins.gpio13, // RX1
         Option::<AnyIOPin>::None,   
         Option::<AnyIOPin>::None,
-        &uart::config::Config::default().baudrate(Hertz(9_600)),
+        &uart::config::Config::default().baudrate(Hertz(57600)),
     )?;
 
     let m0 = PinDriver::input(pins.gpio4)?; // M0
@@ -75,13 +64,12 @@ fn main() -> anyhow::Result<()> {
     let mut e32 = E32Module::new();
 
     let mut state;
-    let mut low_wait = 0;
-    let mut up_wait = 0;
-    let mut low_last_size = 0;
-    let mut up_last_size = 0;
-    let mut buf = [0_u8; 1];
-    let mut buf1 = [0_u8; 1];
+    let mut buf:[u8; BUFF_SIZE] = [0; BUFF_SIZE];
+    let mut buf1: [u8; BUFF_SIZE] = [0; BUFF_SIZE];
     let mut params_buf = [0_u8; CONF_SIZE];
+    uart0.write(b"ESP32 E32 Module Bridge\n")?;
+    let mut b = 0;
+    let mut b1 = 0;
     loop {
         // Check state change
         let new_state = match (m0.is_high(), m1.is_high()) {
@@ -94,65 +82,49 @@ fn main() -> anyhow::Result<()> {
         match state {
             E32State::Normal => {
                 // Read from UART0 (PC) → upper buffer
-                while let Ok(_b) = uart0.read(&mut buf, BLOCK) {
-                    upper_buffer.enqueue(buf[0]);
-                }
 
+                match uart0.read(&mut buf, 100){
+                    Ok (n)=> {b = n},
+                    Err(_) => {}
+                }
+                if b > 0 {
+                    for x in buf.iter_mut() {
+                        upper_buffer.enqueue(*x);
+                        *x = 0;
+                    }
+                    b = 0;
+                    //let _ = buf.iter().map(|x| upper_buffer.enqueue(*x));
+                }
                 // Read from UART1 (STM32) → lower buffer
-                while let Ok(_b) = uart0.read(&mut buf1, BLOCK) {
-                    lower_buffer.enqueue(buf1[0]);
-                }
+                match uart1.read(&mut buf1, 100){
+                    Ok (n)=> b1 = n,
+                    Err(_) => {}
 
-                // Handle lower_buffer → UART1
+                }
+                if b1 > 0 {
+                    for x in buf1.iter_mut() {
+                        lower_buffer.enqueue(*x);
+                        *x = 0;
+                    }
+                    b1 = 0;
+                    //let _ = buf1.iter().map(|x| lower_buffer.enqueue(*x));
+                }
+                // Handle lower_buffer → UART0
                 if lower_buffer.available() > 0 {
-                    let current_size = lower_buffer.available();
-                    if current_size != low_last_size {
-                        TIMER0_EXPIRED.store(false, Ordering::Relaxed);
-                        timer0.enable_alarm(true)?;
-                        timer0.enable(true)?;
-                        low_wait = 0;
-                        low_last_size = current_size;
-                    } else if TIMER0_EXPIRED.load(Ordering::Relaxed) {
-                        TIMER0_EXPIRED.store(false, Ordering::Relaxed);
-                        timer0.enable(true)?;
-                        timer0.enable_alarm(true)?;
-                        low_wait += 1;
-                        if low_wait >= MAX_WAIT_TIMES {
-                            TIMER0_EXPIRED.store(false, Ordering::Relaxed);
-                            timer0.enable(false)?;
-                            timer0.enable_alarm(false)?;
-                            aux.set_low()?;
-                            let data = lower_buffer.deallqueue();
-                            uart1.write(&data)?;
-                            aux.set_high()?;
-                        }
+                    timer1.after(Duration::from_micros(BYTE_TIME_57600 * MAX_WAIT_TIMES))?;
+                    if TIMER1_EXPIRED.load(Ordering::Relaxed) {
+                        TIMER1_EXPIRED.store(false, Ordering::Relaxed);
+                        let data = lower_buffer.deallqueue();
+                        uart0.write(&data)?;
                     }
                 }
-
-                // Handle upper_buffer → UART0
+                // Handle upper_buffer → UART1
                 if upper_buffer.available() > 0 {
-                    let current_size = upper_buffer.available();
-                    if current_size != up_last_size {
-                        TIMER1_EXPIRED.store(false, Ordering::Relaxed);
-                        timer0.enable(true)?;
-                        timer0.enable_alarm(true)?;
-                        up_wait = 0;
-                        up_last_size = current_size;
-                    } else if TIMER1_EXPIRED.load(Ordering::Relaxed){
-                        TIMER1_EXPIRED.store(false, Ordering::Relaxed);
-                        timer0.enable(true)?;
-                        timer0.enable_alarm(true)?;
-                        up_wait += 1;
-                        if up_wait >= MAX_WAIT_TIMES {
-                            TIMER1_EXPIRED.store(false, Ordering::Relaxed);
-                            timer0.enable(false)?;
-                            timer0.enable_alarm(false)?;
-                            aux.set_low()?;
-                            aux.set_low()?;
-                            let data = upper_buffer.deallqueue();
-                            uart0.write(&data)?;
-                            aux.set_high()?;
-                        }
+                    timer0.after(Duration::from_micros(BYTE_TIME_19200 * MAX_WAIT_TIMES))?;
+                    if TIMER0_EXPIRED.load(Ordering::Relaxed) {
+                        TIMER0_EXPIRED.store(false, Ordering::Relaxed);
+                        let data = upper_buffer.deallqueue();
+                        uart1.write(&data)?;
                     }
                 }
             }
