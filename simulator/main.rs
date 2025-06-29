@@ -87,6 +87,7 @@ fn main() -> anyhow::Result<()> {
                     Ok (n)=> {b = n},
                     Err(_) => {}
                 }
+                println!("UART0 read: {}", b);
                 if b > 0 {
                     for x in buf.iter_mut() {
                         upper_buffer.enqueue(*x);
@@ -101,6 +102,7 @@ fn main() -> anyhow::Result<()> {
                     Err(_) => {}
 
                 }
+                println!("UART1 read: {}", b1);
                 if b1 > 0 {
                     for x in buf1.iter_mut() {
                         lower_buffer.enqueue(*x);
