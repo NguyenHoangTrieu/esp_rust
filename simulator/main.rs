@@ -92,8 +92,11 @@ fn main() -> anyhow::Result<()> {
                     for x in buf.iter_mut() {
                         upper_buffer.enqueue(*x);
                         *x = 0;
+                        b -= 1;
+                        if b == 0 {
+                            break;
+                        }
                     }
-                    b = 0;
                     //let _ = buf.iter().map(|x| upper_buffer.enqueue(*x));
                 }
                 // Read from UART1 (STM32) → lower buffer
@@ -107,8 +110,11 @@ fn main() -> anyhow::Result<()> {
                     for x in buf1.iter_mut() {
                         lower_buffer.enqueue(*x);
                         *x = 0;
+                        b1 -= 1;
+                        if b1 == 0 {
+                            break;
+                        }
                     }
-                    b1 = 0;
                     //let _ = buf1.iter().map(|x| lower_buffer.enqueue(*x));
                 }
                 // Handle lower_buffer → UART0
