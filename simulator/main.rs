@@ -87,7 +87,6 @@ fn main() -> anyhow::Result<()> {
                     Ok (n)=> {b = n},
                     Err(_) => {}
                 }
-                println!("UART0 read: {}", b);
                 if b > 0 {
                     for x in buf.iter_mut() {
                         upper_buffer.enqueue(*x);
@@ -105,7 +104,6 @@ fn main() -> anyhow::Result<()> {
                     Err(_) => {}
 
                 }
-                println!("UART1 read: {}", b1);
                 if b1 > 0 {
                     for x in buf1.iter_mut() {
                         lower_buffer.enqueue(*x);
@@ -123,7 +121,6 @@ fn main() -> anyhow::Result<()> {
                     if TIMER1_EXPIRED.load(Ordering::Relaxed) {
                         TIMER1_EXPIRED.store(false, Ordering::Relaxed);
                         let n = lower_buffer.available();
-                        println!("lower_buffer available: {}", n);
                         let data = lower_buffer.deallqueue();
                         uart0.write(&data[..n])?;
                     }
@@ -134,7 +131,6 @@ fn main() -> anyhow::Result<()> {
                     if TIMER0_EXPIRED.load(Ordering::Relaxed) {
                         TIMER0_EXPIRED.store(false, Ordering::Relaxed);
                         let n = upper_buffer.available();
-                        println!("upper_buffer available: {}", n);
                         let data = upper_buffer.deallqueue();
                         uart1.write(&data[..n])?;
                     }
