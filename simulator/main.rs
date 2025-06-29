@@ -115,6 +115,7 @@ fn main() -> anyhow::Result<()> {
                     if TIMER1_EXPIRED.load(Ordering::Relaxed) {
                         TIMER1_EXPIRED.store(false, Ordering::Relaxed);
                         let n = lower_buffer.available();
+                        println!("lower_buffer available: {}", n);
                         let data = lower_buffer.deallqueue();
                         uart0.write(&data[..n])?;
                     }
@@ -125,6 +126,7 @@ fn main() -> anyhow::Result<()> {
                     if TIMER0_EXPIRED.load(Ordering::Relaxed) {
                         TIMER0_EXPIRED.store(false, Ordering::Relaxed);
                         let n = upper_buffer.available();
+                        println!("upper_buffer available: {}", n);
                         let data = upper_buffer.deallqueue();
                         uart1.write(&data[..n])?;
                     }
