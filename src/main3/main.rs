@@ -114,8 +114,9 @@ fn main() -> anyhow::Result<()> {
                     timer1.after(Duration::from_micros(BYTE_TIME_57600 * MAX_WAIT_TIMES))?;
                     if TIMER1_EXPIRED.load(Ordering::Relaxed) {
                         TIMER1_EXPIRED.store(false, Ordering::Relaxed);
+                        let n = lower_buffer.available();
                         let data = lower_buffer.deallqueue();
-                        uart0.write(&data)?;
+                        uart0.write(&data[..n])?;
                     }
                 }
                 // Handle upper_buffer → UART1
@@ -123,8 +124,9 @@ fn main() -> anyhow::Result<()> {
                     timer0.after(Duration::from_micros(BYTE_TIME_19200 * MAX_WAIT_TIMES))?;
                     if TIMER0_EXPIRED.load(Ordering::Relaxed) {
                         TIMER0_EXPIRED.store(false, Ordering::Relaxed);
+                        let n = upper_buffer.available();
                         let data = upper_buffer.deallqueue();
-                        uart1.write(&data)?;
+                        uart1.write(&data[..n])?;
                     }
                 }
             }
