@@ -91,8 +91,11 @@ fn main() -> anyhow::Result<()> {
                     for x in buf.iter_mut() {
                         upper_buffer.enqueue(*x);
                         *x = 0;
+                        b -= 1;
+                        if b == 0 {
+                            break;
+                        }
                     }
-                    b = 0;
                     //let _ = buf.iter().map(|x| upper_buffer.enqueue(*x));
                 }
                 // Read from UART1 (STM32) → lower buffer
@@ -105,8 +108,11 @@ fn main() -> anyhow::Result<()> {
                     for x in buf1.iter_mut() {
                         lower_buffer.enqueue(*x);
                         *x = 0;
+                        b1 -= 1;
+                        if b1 == 0 {
+                            break;
+                        }
                     }
-                    b1 = 0;
                     //let _ = buf1.iter().map(|x| lower_buffer.enqueue(*x));
                 }
                 // Handle lower_buffer → UART0
@@ -115,7 +121,6 @@ fn main() -> anyhow::Result<()> {
                     if TIMER1_EXPIRED.load(Ordering::Relaxed) {
                         TIMER1_EXPIRED.store(false, Ordering::Relaxed);
                         let n = lower_buffer.available();
-                        println!("lower_buffer available: {}", n);
                         let data = lower_buffer.deallqueue();
                         uart0.write(&data[..n])?;
                     }
@@ -126,7 +131,6 @@ fn main() -> anyhow::Result<()> {
                     if TIMER0_EXPIRED.load(Ordering::Relaxed) {
                         TIMER0_EXPIRED.store(false, Ordering::Relaxed);
                         let n = upper_buffer.available();
-                        println!("upper_buffer available: {}", n);
                         let data = upper_buffer.deallqueue();
                         uart1.write(&data[..n])?;
                     }
